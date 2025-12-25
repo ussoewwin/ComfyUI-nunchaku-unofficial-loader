@@ -10,7 +10,7 @@ This is an **unofficial** model loader for **Nunchaku Z Image Turbo**, based on 
 
 ### 2025-12-25
 
-- Fixed import error for `NunchakuZImageDiTLoader` node by improving alternative import method with better path resolution ([Issue #1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-z-image-turbo/issues/1))
+- Fixed import error for `NunchakuZImageDiTLoader` node by improving alternative import method with better path resolution (see [Issue #1](issues/1))
 
 ## Required Patch
 
