@@ -82,8 +82,23 @@ try:
     from .nodes.models.zimage import NunchakuZImageDiTLoader
 
     NODE_CLASS_MAPPINGS["NunchakuUssoewwinZImageDiTLoader"] = NunchakuZImageDiTLoader
-except ImportError:
-    logger.exception("Node `NunchakuZImageDiTLoader` import failed:")
+except (ImportError, ModuleNotFoundError) as e:
+    logger.exception(f"Node `NunchakuZImageDiTLoader` import failed: {e}")
+    # Try alternative import method
+    try:
+        import importlib.util
+        import os
+        spec = importlib.util.spec_from_file_location(
+            "zimage",
+            os.path.join(os.path.dirname(__file__), "nodes", "models", "zimage.py")
+        )
+        zimage_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(zimage_module)
+        NunchakuZImageDiTLoader = zimage_module.NunchakuZImageDiTLoader
+        NODE_CLASS_MAPPINGS["NunchakuUssoewwinZImageDiTLoader"] = NunchakuZImageDiTLoader
+        logger.info("Successfully loaded NunchakuZImageDiTLoader using alternative method")
+    except Exception as e2:
+        logger.exception(f"Alternative import method also failed: {e2}")
 
 NODE_DISPLAY_NAME_MAPPINGS = {k: v.TITLE for k, v in NODE_CLASS_MAPPINGS.items()}
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS"]
