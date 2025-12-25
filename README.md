@@ -10,7 +10,9 @@ This is an **unofficial** model loader for **Nunchaku Z Image Turbo**, based on 
 
 This node requires a patch to be applied to the Nunchaku package. You must manually apply the patch file before using this node.
 
-**Important**: The Nunchaku library must be the version from **December 24, 2025** (2025-12-24). This patch is designed specifically for that version and may not work with other versions. You need to build the Nunchaku library from source for this date, as this version may not be available as a pre-built package.
+**Important**: The Nunchaku library must be the version from **December 24, 2025** (2025-12-24). This patch is designed specifically for that version and may not work with other versions.
+
+**Pre-built package**: For Windows with Python 3.13 and PyTorch 2.9.1+cu130, a pre-built package is available at [ussoewwin/nunchaku-build-on-cu130-windows](https://huggingface.co/ussoewwin/nunchaku-build-on-cu130-windows). This package includes version 1.1.0dev20251224. If you use a different environment, you need to build the Nunchaku library from source.
 
 ### Patch Location
 
@@ -97,7 +99,7 @@ The node implements the following loading process:
 
 #### Usage Notes
 
-- **Nunchaku library version**: You must have the Nunchaku library version from **December 24, 2025** (2025-12-24) installed. You need to build it from source as this version may not be available as a pre-built package.
+- **Nunchaku library version**: You must have the Nunchaku library version from **December 24, 2025** (2025-12-24) installed. For Windows with Python 3.13 and PyTorch 2.9.1+cu130, a pre-built package is available at [ussoewwin/nunchaku-build-on-cu130-windows](https://huggingface.co/ussoewwin/nunchaku-build-on-cu130-windows). For other environments, you need to build it from source.
 - Ensure you have the required Nunchaku package installed (version >= 1.0.0)
 - Models must be quantized using SVDQuant and saved with proper metadata
 - The node automatically detects and handles different quantization precisions (INT4, FP4)
