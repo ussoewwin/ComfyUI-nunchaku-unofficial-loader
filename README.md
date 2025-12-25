@@ -6,6 +6,42 @@
 
 This is an **unofficial** model loader for **Nunchaku Z Image Turbo**, based on [ComfyUI-nunchaku](https://github.com/nunchaku-tech/ComfyUI-nunchaku) with custom additions.
 
+## Required Patch
+
+This node requires a patch to be applied to the Nunchaku package. You must manually apply the patch file before using this node.
+
+**Important**: The Nunchaku library must be the version from **December 24, 2025** (2025-12-24). This patch is designed specifically for that version and may not work with other versions. You need to build the Nunchaku library from source for this date, as this version may not be available as a pre-built package.
+
+### Patch Location
+
+- **Patch file**: `patch/transformer_zimage.py` (in this repository)
+- **Target file**: `python_embeded/Lib/site-packages/nunchaku/models/transformers/transformer_zimage.py` (or equivalent site-packages path in your Python environment)
+
+### Applying the Patch
+
+1. **Backup the original file**: Before applying the patch, you MUST create a backup of the original file.
+   ```bash
+   # Copy the original file to a backup location
+   copy python_embeded\Lib\site-packages\nunchaku\models\transformers\transformer_zimage.py python_embeded\Lib\site-packages\nunchaku\models\transformers\transformer_zimage.py.backup
+   ```
+
+2. **Apply the patch**: Copy the patch file to replace the original file.
+   ```bash
+   # Copy the patch file to the target location
+   copy patch\transformer_zimage.py python_embeded\Lib\site-packages\nunchaku\models\transformers\transformer_zimage.py
+   ```
+
+### Restoring the Original File
+
+If you need to restore the original file (e.g., after uninstalling this node or switching to the official version), use the backup:
+
+```bash
+# Restore from backup
+copy python_embeded\Lib\site-packages\nunchaku\models\transformers\transformer_zimage.py.backup python_embeded\Lib\site-packages\nunchaku\models\transformers\transformer_zimage.py
+```
+
+**Important**: Always keep a backup of the original file. Without it, you may not be able to restore the original Nunchaku package functionality.
+
 ## Nodes
 
 ### Nunchaku-ussoewwin Z-Image-Turbo DiT Loader
@@ -61,6 +97,7 @@ The node implements the following loading process:
 
 #### Usage Notes
 
+- **Nunchaku library version**: You must have the Nunchaku library version from **December 24, 2025** (2025-12-24) installed. You need to build it from source as this version may not be available as a pre-built package.
 - Ensure you have the required Nunchaku package installed (version >= 1.0.0)
 - Models must be quantized using SVDQuant and saved with proper metadata
 - The node automatically detects and handles different quantization precisions (INT4, FP4)
