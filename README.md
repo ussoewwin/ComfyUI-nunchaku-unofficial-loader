@@ -100,9 +100,7 @@ The node implements the following loading process:
 4. Configure CPU offload based on your GPU memory
 5. Connect the MODEL output to your sampling nodes
 
-<div align="center">
-  <img src="png/node.png" alt="Nunchaku-ussoewwin Z-Image-Turbo DiT Loader Node" width="400">
-</div>
+<img src="png/node.png" alt="Nunchaku-ussoewwin Z-Image-Turbo DiT Loader Node" width="400">
 
 ## License
 
