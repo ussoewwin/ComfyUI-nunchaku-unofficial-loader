@@ -17,19 +17,28 @@ This node requires a patch to be applied to the Nunchaku package. You must manua
 ### Patch Location
 
 - **Patch file**: `patch/transformer_zimage.py` (in this repository)
-- **Target file**: `python_embeded/Lib/site-packages/nunchaku/models/transformers/transformer_zimage.py` (or equivalent site-packages path in your Python environment)
+- **Target file**: The path depends on your Python environment:
+  - **ComfyUI Portable version**: `python_embeded/Lib/site-packages/nunchaku/models/transformers/transformer_zimage.py`
+  - **venv/virtualenv**: `venv/Lib/site-packages/nunchaku/models/transformers/transformer_zimage.py` (or equivalent virtual environment path)
+  - **System Python**: The site-packages path in your system Python installation
+  - **Other environments**: Use the appropriate site-packages path for your Python environment
+
+**Note**: The examples below assume a ComfyUI Portable installation. If you are using a different environment (venv, virtualenv, system Python, etc.), adjust the paths accordingly.
 
 ### Applying the Patch
 
+The following examples use ComfyUI Portable paths. Adjust the paths if you are using a different environment (venv, virtualenv, system Python, etc.).
+
 1. **Backup the original file**: Before applying the patch, you MUST create a backup of the original file.
    ```bash
-   # Copy the original file to a backup location
+   # Copy the original file to a backup location (ComfyUI Portable example)
    copy python_embeded\Lib\site-packages\nunchaku\models\transformers\transformer_zimage.py python_embeded\Lib\site-packages\nunchaku\models\transformers\transformer_zimage.py.backup
    ```
 
 2. **Apply the patch**: Copy the patch file to replace the original file.
    ```bash
-   # Copy the patch file to the target location
+   # Copy the patch file to the target location (ComfyUI Portable example)
+   # Replace "patch\transformer_zimage.py" with the actual path to the patch file in this repository
    copy patch\transformer_zimage.py python_embeded\Lib\site-packages\nunchaku\models\transformers\transformer_zimage.py
    ```
 
@@ -38,7 +47,8 @@ This node requires a patch to be applied to the Nunchaku package. You must manua
 If you need to restore the original file (e.g., after uninstalling this node or switching to the official version), use the backup:
 
 ```bash
-# Restore from backup
+# Restore from backup (ComfyUI Portable example)
+# Adjust the path if you are using a different environment
 copy python_embeded\Lib\site-packages\nunchaku\models\transformers\transformer_zimage.py.backup python_embeded\Lib\site-packages\nunchaku\models\transformers\transformer_zimage.py
 ```
 
