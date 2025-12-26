@@ -87,10 +87,6 @@ The node implements the following loading process:
 
 - **Nunchaku library version**: You **MUST** have the Nunchaku library version from **December 24, 2025** (2025-12-24) installed. This is a hard requirement - other versions will not work. For Windows with Python 3.13 and PyTorch 2.9.1+cu130, a pre-built package is available at [ussoewwin/nunchaku-build-on-cu130-windows](https://huggingface.co/ussoewwin/nunchaku-build-on-cu130-windows). For other environments, you need to build it from source. Build instructions are not provided in this repository; please refer to the official Nunchaku repository.
 - Ensure you have the required ComfyUI-Nunchaku package installed (version >= 1.0.2)
-- Models must be quantized using SVDQuant and saved with proper metadata
-- The node automatically detects and handles different quantization precisions (INT4, FP4)
-- CPU offload can significantly reduce VRAM usage but may increase inference time due to CPU-GPU transfers
-- For best performance on high-end GPUs (>=15GB), disable CPU offload
 
 #### Example Workflow
 
