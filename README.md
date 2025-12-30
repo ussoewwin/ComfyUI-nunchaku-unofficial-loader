@@ -73,6 +73,19 @@ Recommended setup:
 
 The node requires selecting a separate **CLIP checkpoint** because CLIP is not part of the quantized UNet file.
 
+### Nunchaku-ussoewwin SDXL LoRA Loader
+
+<img src="png/sdxllora.png" alt="Nunchaku-ussoewwin SDXL LoRA Loader Node" width="400">
+
+A ComfyUI node for loading and applying LoRA (Low-Rank Adaptation) to Nunchaku quantized SDXL models.
+
+#### Features
+
+- **LoRA Loading**: Loads and applies LoRA files to Nunchaku quantized SDXL UNet models
+- **Multiple LoRA Support**: Supports stacking multiple LoRAs with individual strength controls
+- **SVDQ Compatibility**: Works with SVDQ quantized UNet models
+- **Dynamic UI**: Automatically adjusts the number of visible LoRA slots based on configuration
+
 ## License
 
 Licensed under the Apache License, Version 2.0. See [LICENCE.txt](LICENCE.txt) for details.
