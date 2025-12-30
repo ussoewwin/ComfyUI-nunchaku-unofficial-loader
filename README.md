@@ -17,6 +17,11 @@ These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom add
 
 ## Changelog
 
+### Version 2.1
+
+- Published LoRA Loader technical documentation
+- See [Release Notes v2.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-z-image-turbo-loader/releases/tag/2.1) for details
+
 ### Version 2.0
 
 - Added SDXL DIT Loader support
