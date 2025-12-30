@@ -14,7 +14,7 @@ This repository may be closed or archived after the official node is released.
 
 </div>
 
-This is an **unofficial** model loader for **Nunchaku Z Image Turbo**, based on [ComfyUI-nunchaku](https://github.com/nunchaku-tech/ComfyUI-nunchaku) with custom additions.
+These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom additions.
 
 ## Changelog
 
