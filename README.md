@@ -8,8 +8,7 @@
 
 <p style="font-size: 1.2em; font-weight: bold; color: #d63031;">
 This is an <strong>UNOFFICIAL</strong> test version of the node.<br>
-It may not work correctly depending on your environment.<br>
-This repository may be closed or archived after the official node is released.
+It may not work correctly depending on your environment.
 </p>
 
 </div>
