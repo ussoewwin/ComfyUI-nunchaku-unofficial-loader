@@ -406,6 +406,26 @@ try:
 except (ImportError, ModuleNotFoundError) as e:
     logger.exception(f"Node `SDXL LoRA V3` import failed: {e}")
 
+try:
+    from .nodes.FirstBlockCachePatchNode import NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced
+    NODE_CLASS_MAPPINGS["NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced"] = NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced
+except (ImportError, ModuleNotFoundError) as e:
+    logger.exception(f"Node `NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced` import failed: {e}")
+
+
+try:
+    from .nodes.nunchaku_usdu import (
+        NunchakuUltimateSDUpscale,
+        NunchakuUltimateSDUpscaleNoUpscale,
+        NunchakuUltimateSDUpscaleCustomSample,
+    )
+    NODE_CLASS_MAPPINGS["NunchakuUltimateSDUpscale"] = NunchakuUltimateSDUpscale
+    NODE_CLASS_MAPPINGS["NunchakuUltimateSDUpscaleNoUpscale"] = NunchakuUltimateSDUpscaleNoUpscale
+    NODE_CLASS_MAPPINGS["NunchakuUltimateSDUpscaleCustomSample"] = NunchakuUltimateSDUpscaleCustomSample
+    logger.info("Nunchaku Ultimate SD Upscale nodes registered successfully")
+except Exception as e:
+    logger.error(f"Failed to register Nunchaku Ultimate SD Upscale nodes: {e}", exc_info=True)
+
 NODE_DISPLAY_NAME_MAPPINGS = {k: v.TITLE for k, v in NODE_CLASS_MAPPINGS.items()}
 WEB_DIRECTORY = "js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
