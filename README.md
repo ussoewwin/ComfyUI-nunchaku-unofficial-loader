@@ -137,6 +137,8 @@ A ComfyUI node that implements the First Block Cache feature for Nunchaku SDXL m
 
 ### Nunchaku Ultimate SD Upscale
 
+<img src="png/upscale.png" alt="Nunchaku Ultimate SD Upscale Node" width="400">
+
 A ComfyUI node for upscaling images using tile-based image-to-image processing, specifically optimized for Nunchaku SDXL models.
 
 #### Features
