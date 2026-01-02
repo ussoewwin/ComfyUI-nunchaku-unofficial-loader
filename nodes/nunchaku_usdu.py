@@ -102,17 +102,16 @@ def _to_fp32_image(image: torch.Tensor) -> torch.Tensor:
     if torch.is_tensor(t):
         t = t.to(dtype=torch.float32)
         
-        # Check if values are in [0,1] range or need normalization
+        # Always normalize to maximize dynamic range
+        # This fixes the issue where Nunchaku SDXL VAE outputs compressed range [0.15, 0.85]
         min_val = t.min().item()
         max_val = t.max().item()
         
-        # If values are outside [0,1], normalize them
-        if min_val < 0.0 or max_val > 1.0:
-            # Normalize to [0,1] range
-            if max_val > min_val:
-                t = (t - min_val) / (max_val - min_val)
-            else:
-                t = torch.zeros_like(t)
+        # Normalize to [0,1] range if there's a valid range
+        if max_val > min_val:
+            t = (t - min_val) / (max_val - min_val)
+        else:
+            t = torch.zeros_like(t)
         
         # Ensure values are in [0,1] range
         t = torch.clamp(t, 0.0, 1.0)
@@ -252,9 +251,12 @@ class NunchakuUltimateSDUpscale:
         shared.sd_upscalers[0] = UpscalerData()
         shared.actual_upscaler = upscale_model
 
+        # Normalize color range for Nunchaku SDXL VAE output before processing
+        image = _to_fp32_image(image)
+
         # Set the batch of images
         shared.batch = [tensor_to_pil(image, i) for i in range(len(image))]
-        # Set batch_as_tensor as-is (no modification)
+        # Set batch_as_tensor
         shared.batch_as_tensor = image
 
         # Processing
@@ -317,155 +319,4 @@ class NunchakuUltimateSDUpscale:
         finally:
             # Restore the original logging level
             logger.setLevel(old_level)
-
-
-class NunchakuUltimateSDUpscaleNoUpscale(NunchakuUltimateSDUpscale):
-    @classmethod
-    def INPUT_TYPES(s):
-        required, optional = USDU_base_inputs()
-        remove_input(required, "upscale_model")
-        remove_input(required, "upscale_by")
-        rename_input(required, "image", "upscaled_image")
-        return prepare_inputs(required, optional)
-
-    RETURN_TYPES = ("IMAGE",)
-    FUNCTION = "upscale"
-    CATEGORY = "image/upscaling"
-    OUTPUT_TOOLTIPS = ("The final refined image.",)
-    DESCRIPTION = "Runs image-to-image on tiles from the input image."
-    TITLE = "Nunchaku Ultimate SD Upscale (No Upscale)"
-
-    def upscale(
-        self,
-        upscaled_image,
-        model,
-        positive,
-        negative,
-        vae,
-        seed,
-        steps,
-        cfg,
-        sampler_name,
-        scheduler,
-        denoise,
-        mode_type,
-        tile_width,
-        tile_height,
-        mask_blur,
-        tile_padding,
-        seam_fix_mode,
-        seam_fix_denoise,
-        seam_fix_mask_blur,
-        seam_fix_width,
-        seam_fix_padding,
-        force_uniform_tiles,
-        tiled_decode,
-    ):
-        upscale_by = 1.0
-        return super().upscale(
-            upscaled_image,
-            model,
-            positive,
-            negative,
-            vae,
-            upscale_by,
-            seed,
-            steps,
-            cfg,
-            sampler_name,
-            scheduler,
-            denoise,
-            None,
-            mode_type,
-            tile_width,
-            tile_height,
-            mask_blur,
-            tile_padding,
-            seam_fix_mode,
-            seam_fix_denoise,
-            seam_fix_mask_blur,
-            seam_fix_width,
-            seam_fix_padding,
-            force_uniform_tiles,
-            tiled_decode,
-        )
-
-
-class NunchakuUltimateSDUpscaleCustomSample(NunchakuUltimateSDUpscale):
-    @classmethod
-    def INPUT_TYPES(s):
-        required, optional = USDU_base_inputs()
-        remove_input(required, "upscale_model")
-        optional.append(("upscale_model", ("UPSCALE_MODEL", {"tooltip": "The model to use for upscaling the image. If not provided, a simple Lanczos scaling will be used instead."})))
-        optional.append(("custom_sampler", ("SAMPLER", {"tooltip": "A custom sampler to use instead of the built-in ComfyUI sampler specified by sampler_name. Only used if both custom_sampler and custom_sigmas are provided."})))
-        optional.append(("custom_sigmas", ("SIGMAS", {"tooltip": "A custom noise schedule to use during sampling. Only used if both custom_sampler and custom_sigmas are provided."})))
-        return prepare_inputs(required, optional)
-
-    RETURN_TYPES = ("IMAGE",)
-    FUNCTION = "upscale"
-    CATEGORY = "image/upscaling"
-    OUTPUT_TOOLTIPS = ("The final upscaled image.",)
-    DESCRIPTION = "Runs image-to-image on tiles from the input image."
-    TITLE = "Nunchaku Ultimate SD Upscale (Custom Sample)"
-
-    def upscale(
-        self,
-        image,
-        model,
-        positive,
-        negative,
-        vae,
-        upscale_by,
-        seed,
-        steps,
-        cfg,
-        sampler_name,
-        scheduler,
-        denoise,
-        mode_type,
-        tile_width,
-        tile_height,
-        mask_blur,
-        tile_padding,
-        seam_fix_mode,
-        seam_fix_denoise,
-        seam_fix_mask_blur,
-        seam_fix_width,
-        seam_fix_padding,
-        force_uniform_tiles,
-        tiled_decode,
-        upscale_model=None,
-        custom_sampler=None,
-        custom_sigmas=None,
-    ):
-        return super().upscale(
-            image,
-            model,
-            positive,
-            negative,
-            vae,
-            upscale_by,
-            seed,
-            steps,
-            cfg,
-            sampler_name,
-            scheduler,
-            denoise,
-            upscale_model,
-            mode_type,
-            tile_width,
-            tile_height,
-            mask_blur,
-            tile_padding,
-            seam_fix_mode,
-            seam_fix_denoise,
-            seam_fix_mask_blur,
-            seam_fix_width,
-            seam_fix_padding,
-            force_uniform_tiles,
-            tiled_decode,
-            custom_sampler,
-            custom_sigmas,
-        )
-
 

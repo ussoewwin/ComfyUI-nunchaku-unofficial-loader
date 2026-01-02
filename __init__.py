@@ -416,12 +416,8 @@ except (ImportError, ModuleNotFoundError) as e:
 try:
     from .nodes.nunchaku_usdu import (
         NunchakuUltimateSDUpscale,
-        NunchakuUltimateSDUpscaleNoUpscale,
-        NunchakuUltimateSDUpscaleCustomSample,
     )
     NODE_CLASS_MAPPINGS["NunchakuUltimateSDUpscale"] = NunchakuUltimateSDUpscale
-    NODE_CLASS_MAPPINGS["NunchakuUltimateSDUpscaleNoUpscale"] = NunchakuUltimateSDUpscaleNoUpscale
-    NODE_CLASS_MAPPINGS["NunchakuUltimateSDUpscaleCustomSample"] = NunchakuUltimateSDUpscaleCustomSample
     logger.info("Nunchaku Ultimate SD Upscale nodes registered successfully")
 except Exception as e:
     logger.error(f"Failed to register Nunchaku Ultimate SD Upscale nodes: {e}", exc_info=True)
