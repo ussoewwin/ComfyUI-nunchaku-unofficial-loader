@@ -36,8 +36,6 @@ def get_fb_cache_global_cache(transformer_options, timesteps):
         }
         logger.info(f"[FB Cache] Initialized cache_stats at step {attrs['step_i']:.2f}")
 
-
-
 # For Nunchaku SDXL models (UNet2DConditionModel based)
 def fb_cache_enter_sdxl(img, img_ids, txt, txt_ids, timesteps, y, guidance, control, attn_mask, transformer_options):
     logger.info(f"[FB Cache] enter_sdxl called at step {timesteps[0].detach().cpu().item():.2f}")

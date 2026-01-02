@@ -17,6 +17,11 @@ These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom add
 
 ## Changelog
 
+### Version 2.2
+
+- Added First Block Cache feature for Nunchaku SDXL models
+- See [Release Notes v2.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-z-image-turbo-loader/releases/tag/2.2) for details
+
 ### Version 2.1
 
 - Published LoRA Loader technical documentation
@@ -97,6 +102,29 @@ A ComfyUI node for loading and applying LoRA (Low-Rank Adaptation) to Nunchaku q
 - **Multiple LoRA Support**: Supports stacking multiple LoRAs with individual strength controls
 - **SVDQ Compatibility**: Works with SVDQ quantized UNet models
 - **Dynamic UI**: Automatically adjusts the number of visible LoRA slots based on configuration
+
+### Nunchaku-ussoewwin Apply First Block Cache Patch Advanced
+
+<img src="png/afbc.png" alt="Nunchaku-ussoewwin Apply First Block Cache Patch Advanced Node" width="400">
+
+A ComfyUI node that implements the First Block Cache feature for Nunchaku SDXL models. This node caches the output of the first Transformer block and skips recalculation when similar, achieving significant speedup during sampling.
+
+#### Features
+
+- **First Block Caching**: Caches the output of the first Transformer block and skips subsequent block calculations when similar
+- **Similarity Detection**: Uses normalized error threshold to determine if cached output can be reused
+- **Multi-stage Sampler Support**: Automatically detects and disables cache for multi-stage samplers (HeunPP2, Heun++, etc.) to maintain quality
+- **Timestep Range Control**: Configurable start and end timestep percentages for cache activation
+- **Performance Optimization**: Achieves approximately 1.08-1.8x speedup with Euler samplers
+- **Statistics Logging**: Provides detailed cache hit/miss statistics and estimated speedup
+
+#### Usage Notes
+
+- **Residual Diff Threshold**: 
+  - `0.0`: Cache disabled (always calculates)
+  - `0.12` (SDXL): Approximately 1.8x speedup
+- **Sampler Compatibility**: Works best with Euler-family samplers. Multi-stage samplers (HeunPP2, Heun++, etc.) automatically disable cache to prevent image corruption
+- **Model Support**: Compatible with Nunchaku SDXL (UNet-based) models
 
 ## License
 
