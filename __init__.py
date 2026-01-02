@@ -406,6 +406,12 @@ try:
 except (ImportError, ModuleNotFoundError) as e:
     logger.exception(f"Node `SDXL LoRA V3` import failed: {e}")
 
+try:
+    from .nodes.FirstBlockCachePatchNode import NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced
+    NODE_CLASS_MAPPINGS["NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced"] = NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced
+except (ImportError, ModuleNotFoundError) as e:
+    logger.exception(f"Node `NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced` import failed: {e}")
+
 NODE_DISPLAY_NAME_MAPPINGS = {k: v.TITLE for k, v in NODE_CLASS_MAPPINGS.items()}
 WEB_DIRECTORY = "js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
