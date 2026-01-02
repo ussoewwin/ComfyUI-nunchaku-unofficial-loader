@@ -153,25 +153,6 @@ A ComfyUI node for upscaling images using tile-based image-to-image processing, 
 - **Color Range**: Automatically handles Nunchaku SDXL VAE's compressed color range (0.15-0.85) by normalizing to full range (0.0-1.0)
 - **Module Safety**: Uses isolated module loading to prevent conflicts with other custom nodes
 
-### Nunchaku Ultimate SD Upscale (No Upscale)
-
-A variant of the Ultimate SD Upscale node that performs tile-based image-to-image processing without initial upscaling.
-
-#### Features
-
-- **Tile Processing**: Processes images in tiles without initial upscaling
-- **Same Optimizations**: Includes all color normalization and module isolation features of the standard USDU node
-
-### Nunchaku Ultimate SD Upscale (Custom Sample)
-
-A variant of the Ultimate SD Upscale node that supports custom sampler and sigmas for advanced control.
-
-#### Features
-
-- **Custom Sampler Support**: Allows specifying custom sampler functions
-- **Custom Sigmas**: Supports custom sigma schedules for fine-tuned control
-- **Same Optimizations**: Includes all color normalization and module isolation features of the standard USDU node
-
 ## License
 
 Licensed under the Apache License, Version 2.0. See [LICENCE.txt](LICENCE.txt) for details.
