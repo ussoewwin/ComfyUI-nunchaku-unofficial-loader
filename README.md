@@ -17,6 +17,11 @@ These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom add
 
 ## Changelog
 
+### Version 2.2
+
+- Added First Block Cache feature for Nunchaku models
+- See [Release Notes v2.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-z-image-turbo-loader/releases/tag/2.2) for details
+
 ### Version 2.1
 
 - Published LoRA Loader technical documentation
