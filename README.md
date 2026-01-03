@@ -15,55 +15,6 @@ It may not work correctly depending on your environment.
 
 These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom additions.
 
-## Changelog
-
-### Version 2.4
-
-- Added Flash Attention 2 support for SDXL DiT Loader
-  - Optional acceleration feature enabled by default
-  - Automatically applies FA2 to all attention layers (typically 140 layers in SDXL models)
-  - Requires Flash Attention 2 to be installed in your environment
-  - Can be disabled via the `enable_fa2` parameter if needed
-- Updated SDXL DiT Loader node image
-- See [Release Notes v2.4](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.4) for details
-
-### Version 2.3
-
-- Added Nunchaku Ultimate SD Upscale nodes with improved color normalization
-- Improved First Block Cache with residual injection for better quality
-- Fixed USDU color normalization for Nunchaku SDXL VAE output
-- Fixed module reference separation to prevent data loss
-- Optimized cache similarity calculation using fused kernels
-- Added Flash Attention 2 support for SDXL DiT Loader (optional, enabled by default)
-- See [Release Notes v2.3](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.3) for details
-
-### Version 2.2
-
-- Added First Block Cache feature for Nunchaku SDXL models
-- See [Release Notes v2.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.2) for details
-
-### Version 2.1
-
-- Published LoRA Loader technical documentation
-- See [Release Notes v2.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-z-image-turbo-loader/releases/tag/2.1) for details
-
-### Version 2.0
-
-- Added SDXL DIT Loader support
-- Added SDXL LoRA support
-- Added ControlNet support for SDXL models
-- See [Release Notes v2.0](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-z-image-turbo-loader/releases/tag/2.0) for details
-
-### Version 1.1
-
-- Added Diffsynth ControlNet support for Z-Image-Turbo models
-  - Note: Does not work with standard model patch loader. Requires a custom node developed by the author.
-- See [Release Notes v1.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-z-image-turbo-loader/releases/tag/1.1) for details
-
-### 2025-12-25
-
-- Fixed import error for `NunchakuZImageDiTLoader` node by improving alternative import method with better path resolution (see [Issue #1](issues/1))
-
 ## Requirements
 
 **Nunchaku library**: You **MUST** have the Nunchaku library version **v1.1.0 or later** installed. This is a hard requirement - other versions will not work.
@@ -173,6 +124,55 @@ A ComfyUI node for upscaling images using tile-based image-to-image processing, 
 - **Requires ComfyUI_UltimateSDUpscale**: This node requires the `ComfyUI_UltimateSDUpscale` custom node to be installed
 - **Color Range**: Automatically normalizes Nunchaku SDXL VAE's compressed color range (e.g., 0.15-0.85) to full range (0.0-1.0) to restore proper contrast and color saturation
 - **Module Safety**: Uses isolated module loading to prevent conflicts with other custom nodes
+
+## Changelog
+
+### Version 2.4
+
+- Added Flash Attention 2 support for SDXL DiT Loader
+  - Optional acceleration feature enabled by default
+  - Automatically applies FA2 to all attention layers (typically 140 layers in SDXL models)
+  - Requires Flash Attention 2 to be installed in your environment
+  - Can be disabled via the `enable_fa2` parameter if needed
+- Updated SDXL DiT Loader node image
+- See [Release Notes v2.4](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.4) for details
+
+### Version 2.3
+
+- Added Nunchaku Ultimate SD Upscale nodes with improved color normalization
+- Improved First Block Cache with residual injection for better quality
+- Fixed USDU color normalization for Nunchaku SDXL VAE output
+- Fixed module reference separation to prevent data loss
+- Optimized cache similarity calculation using fused kernels
+- Added Flash Attention 2 support for SDXL DiT Loader (optional, enabled by default)
+- See [Release Notes v2.3](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.3) for details
+
+### Version 2.2
+
+- Added First Block Cache feature for Nunchaku SDXL models
+- See [Release Notes v2.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.2) for details
+
+### Version 2.1
+
+- Published LoRA Loader technical documentation
+- See [Release Notes v2.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-z-image-turbo-loader/releases/tag/2.1) for details
+
+### Version 2.0
+
+- Added SDXL DIT Loader support
+- Added SDXL LoRA support
+- Added ControlNet support for SDXL models
+- See [Release Notes v2.0](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-z-image-turbo-loader/releases/tag/2.0) for details
+
+### Version 1.1
+
+- Added Diffsynth ControlNet support for Z-Image-Turbo models
+  - Note: Does not work with standard model patch loader. Requires a custom node developed by the author.
+- See [Release Notes v1.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-z-image-turbo-loader/releases/tag/1.1) for details
+
+### 2025-12-25
+
+- Fixed import error for `NunchakuZImageDiTLoader` node by improving alternative import method with better path resolution (see [Issue #1](issues/1))
 
 ## License
 
