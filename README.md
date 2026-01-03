@@ -17,7 +17,7 @@ These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom add
 
 ## Changelog
 
-### Version 2.5
+### Version 2.4
 
 - Added Flash Attention 2 support for SDXL DiT Loader
   - Optional acceleration feature enabled by default
@@ -25,7 +25,7 @@ These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom add
   - Requires Flash Attention 2 to be installed in your environment
   - Can be disabled via the `enable_fa2` parameter if needed
 - Updated SDXL DiT Loader node image
-- See [Release Notes v2.5](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.5) for details
+- See [Release Notes v2.4](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.4) for details
 
 ### Version 2.3
 
