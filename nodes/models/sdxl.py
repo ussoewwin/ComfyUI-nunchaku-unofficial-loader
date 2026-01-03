@@ -686,6 +686,10 @@ class NunchakuSDXLDiTLoaderDualCLIP:
                 ),
             },
             "optional": {
+                "enable_fa2": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "Enable Flash Attention 2 for faster inference (requires hardware support)."},
+                ),
                 "device": (["default", "cpu"], {"advanced": True}),
                 "debug": (
                     "BOOLEAN",
@@ -708,6 +712,7 @@ class NunchakuSDXLDiTLoaderDualCLIP:
         model_name: str,
         clip_l_name: str,
         clip_g_name: str,
+        enable_fa2: bool = True,
         device: str = "default",
         debug: bool = False,
         debug_model: bool = False,
@@ -728,6 +733,35 @@ class NunchakuSDXLDiTLoaderDualCLIP:
             model_path = get_full_path_or_raise("diffusion_models", model_name)
             sd, metadata = comfy.utils.load_torch_file(model_path, return_metadata=True)
             model = load_diffusion_model_state_dict(sd, metadata=metadata, model_options={})
+
+            if enable_fa2:
+                try:
+                    # NunchakuSDXLUNet2DConditionModel does not have a top-level set_processor method.
+                    # We must iterate over all modules and find the ones that support set_processor (Attention layers).
+                    unet = model.model.diffusion_model
+                    count_fa2 = 0
+                    count_failed = 0
+                    
+                    for name, module in unet.named_modules():
+                        if hasattr(module, "set_processor"):
+                            try:
+                                # "flashattn2" is the key expected by NunchakuSDXLAttention.set_processor
+                                module.set_processor("flashattn2")
+                                count_fa2 += 1
+                                # logger.debug(f"FA2 enabled for layer: {name}") # Too verbose
+                            except Exception as layer_e:
+                                count_failed += 1
+                                logger.debug(f"Failed to set FA2 for layer {name}: {layer_e}")
+
+                    if count_fa2 > 0:
+                        logger.info(f"Flash Attention 2 enabled for {count_fa2} attention layers.")
+                        if count_failed > 0:
+                            logger.warning(f"Failed to enable FA2 for {count_failed} layers. See debug logs for details.")
+                    else:
+                        logger.warning("Flash Attention 2 was requested but no compatible attention layers were found (0 layers patched).")
+                        
+                except Exception as e:
+                    logger.warning(f"Failed to enable Flash Attention 2: {e}")
 
             # 2) Load SDXL Dual CLIP (L + G).
             # We load state_dicts ourselves so we can normalize OpenCLIP/OpenAI-style keys
