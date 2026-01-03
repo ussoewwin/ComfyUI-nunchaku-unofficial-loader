@@ -17,6 +17,16 @@ These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom add
 
 ## Changelog
 
+### Version 2.5
+
+- Added Flash Attention 2 support for SDXL DiT Loader
+  - Optional acceleration feature enabled by default
+  - Automatically applies FA2 to all attention layers (typically 140 layers in SDXL models)
+  - Requires Flash Attention 2 to be installed in your environment
+  - Can be disabled via the `enable_fa2` parameter if needed
+- Updated SDXL DiT Loader node image
+- See [Release Notes v2.5](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.5) for details
+
 ### Version 2.3
 
 - Added Nunchaku Ultimate SD Upscale nodes with improved color normalization
