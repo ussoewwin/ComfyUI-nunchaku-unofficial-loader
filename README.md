@@ -150,6 +150,16 @@ A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node pr
 
 ## Changelog
 
+### Version 2.5
+
+- Added SDXL Integrated Loader node for unified checkpoint loading
+  - Supports loading both UNet and CLIP from a single checkpoint file
+  - Includes Flash Attention 2 support (enabled by default)
+  - Automatically detects model configuration from checkpoint keys
+- Reorganized node documentation order
+- Updated SDXL DiT Loader with advanced user warning
+- See [Release Notes v2.5](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.5) for details
+
 ### Version 2.4
 
 - Added Flash Attention 2 support for SDXL DiT Loader
