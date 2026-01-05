@@ -25,23 +25,6 @@ These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom add
 
 ## Nodes
 
-### Nunchaku-ussoewwin Z-Image-Turbo DiT Loader
-
-⚠️ **WARNING**: This is an **unofficial experimental loader** created as a prototype before the release of ComfyUI-Nunchaku 1.1.0. This is the author's personal testing environment. **Do not use this node.**
-
-A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node provides support for loading 4-bit quantized Z-Image-Turbo models that have been processed using SVDQuant quantization.
-
-<img src="png/node.png" alt="Nunchaku-ussoewwin Z-Image-Turbo DiT Loader Node" width="400">
-
-#### Features
-
-- **Model Loading**: Loads Nunchaku-quantized Z-Image-Turbo diffusion transformer models
-- **CPU Offloading**: Automatic or manual CPU offloading support to reduce VRAM usage
-- **Memory Management**: Configurable GPU memory usage with transformer block offloading options
-- **Hardware Compatibility**: Automatic hardware compatibility checks for quantization support
-- **Precision Support**: Supports both INT4 and FP4 quantization precisions
-
-
 ### Nunchaku-ussoewwin SDXL DiT Loader
 
 <img src="png/sdxldit.png" alt="Nunchaku-ussoewwin SDXL DiT Loader Node" width="400">
@@ -68,6 +51,24 @@ The node requires selecting a separate **CLIP checkpoint** because CLIP is not p
 
 Pre-quantized SDXL models are available at:
 - **[Nunchaku-R128-SDXL-Series](https://huggingface.co/ussoewwin/Nunchaku-R128-SDXL-Series)** - A collection of high-fidelity quantized SDXL models optimized using Nunchaku (SVDQ W4A4) engine with Rank 128 (r128) quantization.
+
+### Nunchaku-ussoewwin SDXL Integrated Loader
+
+A ComfyUI node for loading "unified" Nunchaku SDXL models that contain both UNet and CLIP in a single checkpoint file. This node behaves like a standard CheckpointLoader but uses Nunchaku for the UNet portion.
+
+#### Features
+
+- **Unified Checkpoint Loading**: Loads both UNet and CLIP from a single checkpoint file
+- **Flash Attention 2 Support**: Optional Flash Attention 2 acceleration for faster inference (enabled by default)
+  - Automatically applies FA2 to all attention layers in the UNet model
+  - Requires Flash Attention 2 to be installed in your environment
+  - Can be disabled via the `enable_fa2` parameter if needed
+- **Model Detection**: Automatically detects model configuration from checkpoint keys
+
+#### Usage Notes
+
+- **Checkpoint Format**: This node is designed for unified checkpoints that contain both UNet and CLIP in a single file
+- **Compatibility**: Works with standard SDXL checkpoint formats that include both UNet and CLIP components
 
 ### Nunchaku-ussoewwin SDXL LoRA Loader
 
@@ -124,6 +125,22 @@ A ComfyUI node for upscaling images using tile-based image-to-image processing, 
 - **Requires ComfyUI_UltimateSDUpscale**: This node requires the `ComfyUI_UltimateSDUpscale` custom node to be installed
 - **Color Range**: Automatically normalizes Nunchaku SDXL VAE's compressed color range (e.g., 0.15-0.85) to full range (0.0-1.0) to restore proper contrast and color saturation
 - **Module Safety**: Uses isolated module loading to prevent conflicts with other custom nodes
+
+### Nunchaku-ussoewwin Z-Image-Turbo DiT Loader
+
+⚠️ **WARNING**: This is an **unofficial experimental loader** created as a prototype before the release of ComfyUI-Nunchaku 1.1.0. This is the author's personal testing environment. **Do not use this node.**
+
+A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node provides support for loading 4-bit quantized Z-Image-Turbo models that have been processed using SVDQuant quantization.
+
+<img src="png/node.png" alt="Nunchaku-ussoewwin Z-Image-Turbo DiT Loader Node" width="400">
+
+#### Features
+
+- **Model Loading**: Loads Nunchaku-quantized Z-Image-Turbo diffusion transformer models
+- **CPU Offloading**: Automatic or manual CPU offloading support to reduce VRAM usage
+- **Memory Management**: Configurable GPU memory usage with transformer block offloading options
+- **Hardware Compatibility**: Automatic hardware compatibility checks for quantization support
+- **Precision Support**: Supports both INT4 and FP4 quantization precisions
 
 ## Changelog
 
