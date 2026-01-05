@@ -23,6 +23,11 @@ These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom add
 
 **Building from source**: If you use a different environment, you need to build the Nunchaku library from source. The build instructions are not provided in this repository; please refer to the official Nunchaku repository for build documentation.
 
+## Available Quantized Models
+
+Pre-quantized SDXL models are available at:
+- **[Nunchaku-R128-SDXL-Series](https://huggingface.co/ussoewwin/Nunchaku-R128-SDXL-Series)** - A collection of high-fidelity quantized SDXL models optimized using Nunchaku (SVDQ W4A4) engine with Rank 128 (r128) quantization.
+
 ## Nodes
 
 ### Nunchaku-ussoewwin SDXL Integrated Loader
@@ -70,11 +75,6 @@ The node requires selecting a separate **CLIP checkpoint** because CLIP is not p
   - Requires Flash Attention 2 to be installed in your environment
   - Can be disabled via the `enable_fa2` parameter if needed
   - Typically enables FA2 for 140 attention layers in SDXL models
-
-#### Available Quantized Models
-
-Pre-quantized SDXL models are available at:
-- **[Nunchaku-R128-SDXL-Series](https://huggingface.co/ussoewwin/Nunchaku-R128-SDXL-Series)** - A collection of high-fidelity quantized SDXL models optimized using Nunchaku (SVDQ W4A4) engine with Rank 128 (r128) quantization.
 
 ### Nunchaku-ussoewwin SDXL LoRA Loader
 
