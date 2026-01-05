@@ -365,12 +365,12 @@ except (ImportError, ModuleNotFoundError) as e:
         logger.exception(f"Alternative import method also failed: {e2}")
 
 try:
-    from .nodes.models.sdxl import NunchakuSDXLDiTLoader, NunchakuSDXLDiTLoaderDualCLIP
+    from .nodes.models.sdxl import NunchakuSDXLDiTLoaderDualCLIP, NunchakuSDXLIntegratedLoader
 
-    NODE_CLASS_MAPPINGS["NunchakuUssoewwinSDXLDiTLoader"] = NunchakuSDXLDiTLoader
     NODE_CLASS_MAPPINGS["NunchakuUssoewwinSDXLDiTLoaderDualCLIP"] = NunchakuSDXLDiTLoaderDualCLIP
+    NODE_CLASS_MAPPINGS["NunchakuUssoewwinSDXLIntegratedLoader"] = NunchakuSDXLIntegratedLoader
 except (ImportError, ModuleNotFoundError) as e:
-    logger.exception(f"Node `NunchakuSDXLDiTLoader` import failed: {e}")
+    logger.exception(f"Node `NunchakuSDXLDiTLoaderDualCLIP` or `NunchakuSDXLIntegratedLoader` import failed: {e}")
     # Try alternative import method using absolute path
     try:
         import importlib.util
@@ -392,11 +392,11 @@ except (ImportError, ModuleNotFoundError) as e:
 
         sdxl_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(sdxl_module)
-        NunchakuSDXLDiTLoader = sdxl_module.NunchakuSDXLDiTLoader
-        NODE_CLASS_MAPPINGS["NunchakuUssoewwinSDXLDiTLoader"] = NunchakuSDXLDiTLoader
         if hasattr(sdxl_module, "NunchakuSDXLDiTLoaderDualCLIP"):
             NODE_CLASS_MAPPINGS["NunchakuUssoewwinSDXLDiTLoaderDualCLIP"] = sdxl_module.NunchakuSDXLDiTLoaderDualCLIP
-        logger.info(f"Successfully loaded NunchakuSDXLDiTLoader using alternative method from {sdxl_path}")
+        if hasattr(sdxl_module, "NunchakuSDXLIntegratedLoader"):
+            NODE_CLASS_MAPPINGS["NunchakuUssoewwinSDXLIntegratedLoader"] = sdxl_module.NunchakuSDXLIntegratedLoader
+        logger.info(f"Successfully loaded NunchakuSDXLDiTLoaderDualCLIP and NunchakuSDXLIntegratedLoader using alternative method from {sdxl_path}")
     except Exception as e2:
         logger.exception(f"Alternative import method also failed: {e2}")
 

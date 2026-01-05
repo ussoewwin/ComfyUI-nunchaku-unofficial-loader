@@ -1,5 +1,5 @@
 """
-This module provides the :class:`NunchakuSDXLDiTLoader` class for loading Nunchaku SDXL models.
+This module provides classes for loading Nunchaku SDXL models.
 """
 
 import json
@@ -17,7 +17,7 @@ from nunchaku.utils import check_hardware_compatibility, get_precision, get_prec
 
 from ...model_configs.sdxl import NunchakuSDXL
 from ...model_patcher import NunchakuModelPatcher
-from ..utils import get_filename_list, get_full_path_or_raise
+from ..utils import get_filename_list, get_full_path_or_raise, folder_paths
 
 # Get log level from environment variable (default to INFO)
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -502,6 +502,35 @@ def load_diffusion_model_state_dict(
     # _build_model does: from_config(config).to(torch_dtype) in meta device context
     config = json.loads(metadata.get("config", "{}"))
 
+    if not config:
+        # Fallback to standard SDXL config if not present in metadata (e.g. invalid/standard checkpoint)
+        # This prevents the model from initializing with default generic UNet config (usually SD1.5-like),
+        # which causes shape mismatches (Linear vs Conv2d, context dim 2048 vs 1280/768).
+        config = {
+            "sample_size": 128,
+            "in_channels": 4,
+            "out_channels": 4,
+            "down_block_types": [
+                "DownBlock2D",
+                "CrossAttnDownBlock2D",
+                "CrossAttnDownBlock2D",
+            ],
+            "up_block_types": [
+                "CrossAttnUpBlock2D",
+                "CrossAttnUpBlock2D",
+                "UpBlock2D",
+            ],
+            "block_out_channels": [320, 640, 1280],
+            "layers_per_block": 2,
+            "cross_attention_dim": 2048,
+            "transformer_layers_per_block": [1, 2, 10],
+            "attention_head_dim": [5, 10, 20],
+            "use_linear_projection": True,
+            "addition_embed_type": "text_time",
+            "addition_time_embed_dim": 256,
+            "projection_class_embeddings_input_dim": 2816,
+        }
+
     torch_dtype = dtype if dtype is not None else torch.bfloat16
 
     # Build UNet from config (exactly like _build_model in NunchakuModelLoaderMixin)
@@ -577,85 +606,6 @@ def load_diffusion_model_state_dict(
         model.diffusion_model.to(memory_format=torch.channels_last)
     model = model.to(offload_device)
     return NunchakuModelPatcher(model, load_device=load_device, offload_device=offload_device)
-
-
-class NunchakuSDXLDiTLoader:
-    """
-    Loader for Nunchaku SDXL models.
-
-    Attributes
-    ----------
-    RETURN_TYPES : tuple
-        Output types for the node ("MODEL", "CLIP").
-    FUNCTION : str
-        Name of the function to call ("load_model").
-    CATEGORY : str
-        Node category ("Nunchaku-ussoewwin").
-    TITLE : str
-        Node title ("Nunchaku-ussoewwin SDXL DiT Loader").
-    """
-
-    @classmethod
-    def INPUT_TYPES(s):
-        """
-        Define the input types and tooltips for the node.
-
-        Returns
-        -------
-        dict
-            A dictionary specifying the required inputs and their descriptions for the node interface.
-        """
-        return {
-            "required": {
-                "model_name": (
-                    get_filename_list("diffusion_models"),
-                    {"tooltip": "The Nunchaku SDXL UNet model file (often UNet-only)."},
-                ),
-            },
-            "optional": {
-                "debug_model": (
-                    "BOOLEAN",
-                    {"default": False, "tooltip": "Print SDXL apply_model / ControlNet debug info during sampling."},
-                ),
-            },
-        }
-
-    # NOTE: This node loads UNet only. CLIP must be loaded via standard loaders.
-    RETURN_TYPES = ("MODEL",)
-    FUNCTION = "load_model"
-    CATEGORY = "Nunchaku-ussoewwin"
-    TITLE = "Nunchaku-ussoewwin SDXL DiT Loader"
-
-    def load_model(self, model_name: str, debug_model: bool = False, **kwargs):
-        """
-        Load the SDXL model from file and return a patched model.
-        UNet is loaded from model_name (Nunchaku quantized UNet-only safetensors).
-
-        Parameters
-        ----------
-        model_name : str
-            The filename of the SDXL UNet model to load.
-
-        Returns
-        -------
-        tuple
-            A tuple containing the loaded and patched model.
-        """
-        model_path = get_full_path_or_raise("diffusion_models", model_name)
-        sd, metadata = comfy.utils.load_torch_file(model_path, return_metadata=True)
-
-        # Enable/disable model-side debug prints (ControlNet mapping etc.)
-        try:
-            from ...model_base import sdxl as model_base_sdxl
-            model_base_sdxl.set_nunchaku_sdxl_debug(bool(debug_model))
-        except Exception as e:
-            logger.debug(f"Failed to set NunchakuSDXL debug flag: {e}")
-
-        model = load_diffusion_model_state_dict(
-            sd, metadata=metadata, model_options={}
-        )
-
-        return (model,)
 
 
 class NunchakuSDXLDiTLoaderDualCLIP:
@@ -854,3 +804,87 @@ class NunchakuSDXLDiTLoaderDualCLIP:
         finally:
             _CLIP_DEBUG_CONTEXT = _prev_debug
 
+
+class NunchakuSDXLIntegratedLoader(NunchakuSDXLDiTLoaderDualCLIP):
+    """
+    Loader for "Unified" Nunchaku SDXL models that contain both UNet and CLIP in a single file.
+    This behaves like a standard CheckpointLoader but uses Nunchaku for the UNet.
+    """
+    @classmethod
+    def INPUT_TYPES(s):
+        return {
+            "required": {
+                "ckpt_name": (get_filename_list("checkpoints"), {"tooltip": "Unified checkpoint file (UNet + CLIP)."}),
+            },
+            "optional": {
+                "enable_fa2": ("BOOLEAN", {"default": True, "tooltip": "Enable Flash Attention 2."}),
+                "device": (["default", "cpu"], {"advanced": True}),
+                "debug": ("BOOLEAN", {"default": False}),
+                 "debug_model": ("BOOLEAN", {"default": False}),
+            },
+        }
+
+    RETURN_TYPES = ("MODEL", "CLIP")
+    FUNCTION = "load_integrated_model"
+    CATEGORY = "Nunchaku-ussoewwin"
+    TITLE = "Nunchaku-ussoewwin SDXL Integrated Loader"
+
+    def load_integrated_model(self, ckpt_name, enable_fa2=True, device="default", debug=False, debug_model=False, **kwargs):
+        # 1. Load the full state dict
+        ckpt_path = get_full_path_or_raise("checkpoints", ckpt_name)
+        sd, metadata = comfy.utils.load_torch_file(ckpt_path, return_metadata=True)
+        if metadata is None:
+            metadata = {}
+        
+        # --- Load UNet (Nunchaku) ---
+        model = load_diffusion_model_state_dict(sd, metadata=metadata, model_options={})
+
+        if enable_fa2:
+             # Same FA2 logic as DualCLIP
+            try:
+                unet = model.model.diffusion_model
+                count_fa2 = 0
+                for name, module in unet.named_modules():
+                    if hasattr(module, "set_processor"):
+                        try:
+                            module.set_processor("flashattn2")
+                            count_fa2 += 1
+                        except Exception:
+                            pass
+                if count_fa2 > 0:
+                    logger.info(f"Flash Attention 2 enabled for {count_fa2} layers.")
+            except Exception as e:
+                logger.warning(f"Failed to enable Flash Attention 2: {e}")
+
+        # --- Load CLIP ---
+        # "Unified" checkpoints have specific prefixes (conditioner.embedders...) that comfy.sd.load_clip doesn't handle.
+        # We must use model_config to extract the CLIP state dict properly, similar to load_checkpoint_guess_config.
+        # Note: comfy.utils, comfy.sd, and model_detection are already imported at the top of this file.
+        
+        # Detect model config (should match SDXL if keys are correct)
+        clip_model_config = model_detection.model_config_from_unet(sd, "", metadata)
+        if clip_model_config is None:
+            # Fallback for Nunchaku quantized models if detection fails (assume SDXL)
+            # But normally detection checks UNet keys. Nunchaku UNet keys should be standard SDXL keys.
+            logger.warning("Could not detect model config from UNet keys. Assuming SDXL.")
+            from comfy import supported_models as comfy_supported_models
+            clip_model_config = comfy_supported_models.SDXL(sd)
+
+        clip = None
+        clip_target = clip_model_config.clip_target(state_dict=sd)
+        if clip_target is not None:
+            # Helper to extract CLIP keys (handles conditioner.embedders... prefixes)
+            clip_sd = clip_model_config.process_clip_state_dict(sd)
+            if len(clip_sd) > 0:
+                parameters = comfy.utils.calculate_parameters(clip_sd)
+                # Load CLIP
+                clip = comfy.sd.CLIP(clip_target, embedding_directory=folder_paths.get_folder_paths("embeddings"), parameters=parameters, state_dict=clip_sd)
+            else:
+                logger.warning("No CLIP weights found in checkpoint.")
+        
+        if clip is None:
+             logger.warning("Failed to load CLIP from integrated checkpoint.")
+             # Fallback to load_clip (which might fail but it's what was there)
+             # clip = comfy.sd.load_clip(ckpt_paths=[ckpt_path], embedding_directory=folder_paths.get_folder_paths("embeddings"))
+        
+        return (model, clip)
