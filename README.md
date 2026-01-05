@@ -47,6 +47,8 @@ A ComfyUI node for loading "unified" Nunchaku SDXL models that contain both UNet
 
 ### Nunchaku-ussoewwin SDXL DiT Loader
 
+⚠️ **WARNING**: This node is **for advanced users only**. UNet and CLIP split models are **not distributed by the author**. You need to build them yourself.
+
 <img src="png/sdxldit.png" alt="Nunchaku-ussoewwin SDXL DiT Loader Node" width="400">
 
 Important: **Nunchaku / DeepCompressor SDXL SVDQ-FP4 outputs are UNet-only**. They intentionally **do not include CLIP**.
@@ -58,6 +60,8 @@ Recommended setup:
 - **VAE**: standard SDXL VAE
 
 The node requires selecting a separate **CLIP checkpoint** because CLIP is not part of the quantized UNet file.
+
+**Note**: UNet and CLIP split models are not provided by the author. You must build them yourself if you want to use this node.
 
 #### Features
 
