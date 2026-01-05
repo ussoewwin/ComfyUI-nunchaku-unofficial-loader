@@ -54,6 +54,8 @@ Pre-quantized SDXL models are available at:
 
 ### Nunchaku-ussoewwin SDXL Integrated Loader
 
+<img src="png/integrated.png" alt="Nunchaku-ussoewwin SDXL Integrated Loader Node" width="400">
+
 A ComfyUI node for loading "unified" Nunchaku SDXL models that contain both UNet and CLIP in a single checkpoint file. This node behaves like a standard CheckpointLoader but uses Nunchaku for the UNet portion.
 
 #### Features
