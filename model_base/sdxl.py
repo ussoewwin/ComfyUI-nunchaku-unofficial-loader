@@ -4,9 +4,12 @@ Nunchaku SDXL model base.
 This module provides a wrapper for ComfyUI's SDXL model base.
 """
 
-import torch
 import logging
-import os
+import torch
+import torch.nn.functional as F
+from tqdm import tqdm
+
+import comfy
 import comfy.model_management
 import comfy.utils
 import comfy.conds
@@ -16,54 +19,7 @@ from nunchaku.models.unets.unet_sdxl import NunchakuSDXLUNet2DConditionModel
 
 logger = logging.getLogger(__name__)
 
-_SDXL_DEBUG_CONTEXT = False
 
-def set_nunchaku_sdxl_debug(enabled: bool) -> None:
-    """
-    Enable/disable debug prints for NunchakuSDXL wrapper at runtime.
-    This is intended to be toggled from the loader node UI (BOOLEAN input),
-    so users don't need environment variables.
-    """
-    global _SDXL_DEBUG_CONTEXT
-    _SDXL_DEBUG_CONTEXT = bool(enabled)
-
-def _tinfo(x):
-    if x is None:
-        return "None"
-    if torch.is_tensor(x):
-        return f"shape={tuple(x.shape)} dtype={x.dtype} device={x.device}"
-    if isinstance(x, (list, tuple)):
-        return f"{type(x).__name__}(len={len(x)})"
-    if isinstance(x, dict):
-        return f"dict(keys={list(x.keys())})"
-    return f"{type(x).__name__}"
-
-def _list_tensor_shapes(xs, limit: int = 6):
-    if not isinstance(xs, list):
-        return "None"
-    shapes = []
-    for v in xs:
-        if v is None:
-            shapes.append("None")
-        elif torch.is_tensor(v):
-            shapes.append(str(tuple(v.shape)))
-        else:
-            shapes.append(type(v).__name__)
-        if len(shapes) >= limit:
-            break
-    more = "" if len(xs) <= limit else f", ...(+{len(xs)-limit})"
-    return "[" + ", ".join(shapes) + more + "]"
-
-def _dbg_enabled() -> bool:
-    if _SDXL_DEBUG_CONTEXT:
-        return True
-    return os.getenv("NUNCHAKU_SDXL_DEBUG", "0") == "1"
-
-def _dbg_print(msg: str) -> None:
-    # ComfyUI environments often don't show logging.INFO from custom modules reliably.
-    # Use print for debug gated by env var.
-    if _dbg_enabled():
-        print(msg)
 
 
 class NunchakuSDXL(SDXL):
@@ -125,96 +81,65 @@ class NunchakuSDXL(SDXL):
     def _apply_model(self, x, t, c_concat=None, c_crossattn=None, control=None, transformer_options={}, **kwargs):
         """
         Apply the diffusion model with ComfyUI's calling convention.
-        
-        This method converts ComfyUI's parameters to diffusers' UNet2DConditionModel format:
-        - context (c_crossattn) -> encoder_hidden_states
-        - adm (additional model inputs) -> added_cond_kwargs with time_ids and text_embeds
-        
-        Parameters
-        ----------
-        x : torch.Tensor
-            Input latent tensor.
-        t : torch.Tensor
-            Timestep tensor.
-        c_concat : torch.Tensor, optional
-            Concatenated conditioning (for inpainting).
-        c_crossattn : torch.Tensor, optional
-            Cross-attention context (text embeddings).
-        control : dict, optional
-            ControlNet outputs.
-        transformer_options : dict, optional
-            Additional transformer options.
-        **kwargs
-            Additional keyword arguments.
-            
-        Returns
-        -------
-        torch.Tensor
-            Model output tensor.
         """
-        # Get base model output (handles sigma calculation, device casting, etc.)
+        dtype = self.get_dtype()
+
+        # 1. Process inputs using model_sampling (Standard ComfyUI logic)
         sigma = t
         xc = self.model_sampling.calculate_input(sigma, x)
 
         if c_concat is not None:
             xc = torch.cat([xc] + [comfy.model_management.cast_to_device(c_concat, xc.device, xc.dtype)], dim=1)
 
+        # 2. Force cast input latent 'xc' to model dtype (bf16)
+        if xc.dtype != dtype:
+            xc = xc.to(dtype)
+        
+        # 3. Process timestep 't'
+        # Nunchaku expects bf16 timestep, avoiding float32 conversion overhead
+        t = self.model_sampling.timestep(t)
+        if t.dtype != dtype:
+            t = t.to(dtype)
+
+        # 4. Handle context (text encoder outputs)
         context = c_crossattn
-        dtype = self.get_dtype()
-
-        if self.manual_cast_dtype is not None:
-            dtype = self.manual_cast_dtype
-
-        xc = xc.to(dtype)
-        device = xc.device
-        t = self.model_sampling.timestep(t).float()
         if context is not None:
-            context = comfy.model_management.cast_to_device(context, device, dtype)
+            if hasattr(context, "dtype") and context.dtype != dtype:
+                context = context.to(dtype)
+            # Ensure device placement
+            if hasattr(context, "device") and context.device != xc.device:
+                context = context.to(device=xc.device)
 
-        # Handle additional conditions.
-        # NOTE:
-        # In ComfyUI, SDXL's pooled conditioning is computed in extra_conds() (before sampling)
-        # and passed into apply_model as keyword tensors (e.g. "y").
-        # Our previous implementation incorrectly called encode_adm() again here, but at this
-        # stage "pooled_output" is no longer present, causing KeyError.
+        # 5. Handle extra conditions (text_embeds, time_ids)
+        # Revert to direct kwargs handling to avoid strict pooled_output check in self.extra_conds
+        # This matches the logic that was working previously.
         extra_conds = {}
         for o in kwargs:
             extra = kwargs[o]
-
-            if hasattr(extra, "dtype"):
-                extra = comfy.model_management.cast_to_device(extra, device, dtype)
-            elif isinstance(extra, list):
-                ex = []
-                for ext in extra:
-                    ex.append(comfy.model_management.cast_to_device(ext, device, dtype))
-                extra = ex
+            if hasattr(extra, "dtype") and extra.dtype != dtype:
+                 extra = extra.to(dtype)
+            # Ensure device placement
+            if hasattr(extra, "device") and extra.device != xc.device:
+                 extra = extra.to(device=xc.device)
             extra_conds[o] = extra
 
-        t = self.process_timestep(t, x=x, **extra_conds)
-        if "latent_shapes" in extra_conds:
-            xc = comfy.utils.unpack_latents(xc, extra_conds.pop("latent_shapes"))
-
-        # Convert to diffusers format:
-        # NunchakuSDXLUNet2DConditionModel expects added_cond_kwargs with raw SDXL time_ids (B, 6)
-        # and pooled text embeds (B, 1280).
         text_embeds = extra_conds.get("text_embeds", None)
         time_ids = extra_conds.get("time_ids", None)
-        if text_embeds is not None and time_ids is not None:
-            added_cond_kwargs = {"text_embeds": text_embeds, "time_ids": time_ids}
-        else:
-            added_cond_kwargs = None
+        
+        if text_embeds is not None: 
+             if text_embeds.dtype != dtype:
+                 text_embeds = text_embeds.to(dtype)
+             if hasattr(text_embeds, "device") and text_embeds.device != xc.device:
+                 text_embeds = text_embeds.to(device=xc.device)
+                 
+        if time_ids is not None:
+             if time_ids.dtype != dtype:
+                 time_ids = time_ids.to(dtype)
+             if hasattr(time_ids, "device") and time_ids.device != xc.device:
+                 time_ids = time_ids.to(device=xc.device)
+            
+        added_cond_kwargs = {"text_embeds": text_embeds, "time_ids": time_ids}
 
-        if _dbg_enabled():
-            cnt = getattr(self, "_nunchaku_sdxl_dbg_apply_count", 0) + 1
-            self._nunchaku_sdxl_dbg_apply_count = cnt
-            if cnt <= 3 or cnt % 50 == 0:
-                _dbg_print(
-                    "[NunchakuSDXL/_apply_model] "
-                    f"xc={_tinfo(xc)} t={_tinfo(t)} context={_tinfo(context)} "
-                    f"added_cond_kwargs={'present' if added_cond_kwargs else 'None'} "
-                    f"text_embeds={_tinfo(text_embeds)} time_ids={_tinfo(time_ids)} "
-                    f"keys(extra_conds)={sorted(list(extra_conds.keys()))} control={_tinfo(control)}"
-                )
 
         # ControlNet support:
         # ComfyUI ControlNet returns a dict with keys: {"input": [...], "middle": [...], "output": [...]}
@@ -238,27 +163,15 @@ class NunchakuSDXL(SDXL):
                 down_list = [v for v in inp if v is not None]
                 if len(down_list) > 0:
                     down_block_additional_residuals = tuple(
-                        comfy.model_management.cast_to_device(v, device, dtype) for v in down_list
+                        comfy.model_management.cast_to_device(v, xc.device, dtype) for v in down_list
                     )
             if isinstance(mid, list):
                 for v in mid:
                     if v is not None:
-                        mid_block_additional_residual = comfy.model_management.cast_to_device(v, device, dtype)
+                        mid_block_additional_residual = comfy.model_management.cast_to_device(v, xc.device, dtype)
                         break
 
-        if _dbg_enabled() and isinstance(control, dict):
-            cnt = getattr(self, "_nunchaku_sdxl_dbg_ctrl_count", 0) + 1
-            self._nunchaku_sdxl_dbg_ctrl_count = cnt
-            if cnt <= 3 or cnt % 50 == 0:
-                _dbg_print(
-                    "[NunchakuSDXL/_apply_model] "
-                    f"control keys={list(control.keys())} "
-                    f"input={_list_tensor_shapes(control.get('input', None))} "
-                    f"middle={_list_tensor_shapes(control.get('middle', None))} "
-                    f"output={_list_tensor_shapes(control.get('output', None))} "
-                    f"-> down_res={'len='+str(len(down_block_additional_residuals)) if down_block_additional_residuals else 'None'} "
-                    f"mid_res={_tinfo(mid_block_additional_residual)}"
-                )
+
 
         # Call diffusers UNet format
         # NunchakuSDXLUNet2DConditionModel is a diffusers UNet2DConditionModel
@@ -279,11 +192,13 @@ class NunchakuSDXL(SDXL):
         else:
             # Fallback to base class implementation for non-Nunchaku models
             model_output = self.diffusion_model(xc, t, context=context, control=control, transformer_options=transformer_options, **extra_conds)
-        
+
         if len(model_output) > 1 and not torch.is_tensor(model_output):
             model_output, _ = comfy.utils.pack_latents(model_output)
 
-        return self.model_sampling.calculate_denoised(sigma, model_output.float(), x)
+        result = self.model_sampling.calculate_denoised(sigma, model_output.float(), x)
+
+        return result
 
     def extra_conds(self, **kwargs):
         """
@@ -342,15 +257,7 @@ class NunchakuSDXL(SDXL):
         time_ids = base.unsqueeze(0).repeat(pooled_output.shape[0], 1)
         out["time_ids"] = comfy.conds.CONDRegular(time_ids)
 
-        if _dbg_enabled():
-            cnt = getattr(self, "_nunchaku_sdxl_dbg_extra_count", 0) + 1
-            self._nunchaku_sdxl_dbg_extra_count = cnt
-            if cnt <= 3:
-                _dbg_print(
-                    "[NunchakuSDXL/extra_conds] "
-                    f"pooled_output={_tinfo(pooled_output)} adm(y)={_tinfo(adm)} time_ids={_tinfo(time_ids)} cross_attn={_tinfo(cross_attn)} "
-                    f"-> keys(out)={sorted(list(out.keys()))}"
-                )
+
 
         return out
 
