@@ -27,6 +27,7 @@ These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom add
 
 Pre-quantized SDXL models are available at:
 - **[Nunchaku-R128-SDXL-Series](https://huggingface.co/ussoewwin/Nunchaku-R128-SDXL-Series)** - A collection of high-fidelity quantized SDXL models optimized using Nunchaku (SVDQ W4A4) engine with Rank 128 (r128) quantization.
+- **[Nunchaku-R32-SDXL-Series](https://huggingface.co/ussoewwin/Nunchaku-R32-SDXL-Series)** - A collection of quantized SDXL models optimized using Nunchaku (SVDQ W4A4) engine with Rank 32 (r32) quantization.
 
 ## Nodes
 
