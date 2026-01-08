@@ -151,6 +151,12 @@ A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node pr
 
 ## Changelog
 
+### Version 2.6
+
+- Fixed ControlNet support for SDXL models (OpenPose, Depth, Canny, etc.)
+- Added Nunchaku-R32-SDXL-Series to Available Quantized Models section
+- See [Release Notes v2.6](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.6) for details
+
 ### Version 2.5
 
 - Added SDXL Integrated Loader node for unified checkpoint loading
