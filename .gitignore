@@ -1,5 +1,6 @@
-# Markdown files
+# Markdown files (except README.md)
 *.md
+!README.md
 
 # Python cache
 __pycache__/
