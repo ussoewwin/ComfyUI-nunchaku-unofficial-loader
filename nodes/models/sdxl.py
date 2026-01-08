@@ -426,7 +426,7 @@ def _fill_missing_svdq_proj(unet: torch.nn.Module, sd: dict[str, torch.Tensor]) 
 
 
 def load_diffusion_model_state_dict(
-    sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}, model_options: dict = {}
+    sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}, model_options: dict = {}, load_device=None, offload_device=None
 ):
     """
     Load a Nunchaku-quantized SDXL diffusion model.
@@ -477,6 +477,7 @@ def load_diffusion_model_state_dict(
         rank = inferred_rank if inferred_rank is not None else 32
 
     dtype = model_options.get("dtype", None)
+    parameters = comfy.utils.calculate_parameters(sd)
 
     # Allow loading unets from checkpoint files
     diffusion_model_prefix = model_detection.unet_prefix_from_state_dict(sd)
@@ -487,14 +488,16 @@ def load_diffusion_model_state_dict(
     parameters = comfy.utils.calculate_parameters(sd)
     weight_dtype = comfy.utils.weight_dtype(sd)
 
-    load_device = model_management.get_torch_device()
+    if load_device is None:
+        load_device = model_management.get_torch_device()
 
     # Hardware compatibility check only supports some quantization_config formats (with nested "weight" info).
     # Many Nunchaku SDXL safetensors only provide {"rank": ..., "precision": ...}.
     if isinstance(quantization_config, dict) and "weight" in quantization_config:
         check_hardware_compatibility(quantization_config, load_device)
 
-    offload_device = model_management.unet_offload_device()
+    if offload_device is None:
+        offload_device = model_management.unet_offload_device()
 
     # Use _build_model pattern to get UNet, state_dict, and metadata (same as from_pretrained)
     # Since we already have sd and metadata from ComfyUI, we build from config directly
@@ -560,6 +563,16 @@ def load_diffusion_model_state_dict(
             f"SDXL UNet load_state_dict unexpected keys: {len(unexpected)} (showing up to 20): {unexpected[:20]}"
         )
 
+
+    # Determine inference dtype
+    unet_weight_dtype = [torch.float16, torch.bfloat16, torch.float32]
+    if dtype is None:
+        unet_dtype = model_management.unet_dtype(
+            model_params=parameters, supported_dtypes=unet_weight_dtype, weight_dtype=None
+        )
+    else:
+        unet_dtype = dtype
+
     # Create model config and wrap in ComfyUI model structure
     model_config = NunchakuSDXL(
         {
@@ -576,20 +589,8 @@ def load_diffusion_model_state_dict(
     )
     model_config.optimizations["fp8"] = False
 
-    unet_weight_dtype = list(model_config.supported_inference_dtypes)
-    scaled_fp8 = _get_attr_no_warn(model_config, "scaled_fp8", None)
-    if scaled_fp8 is not None:
-        weight_dtype = None
-
-    if dtype is None:
-        unet_dtype = model_management.unet_dtype(
-            model_params=parameters, supported_dtypes=unet_weight_dtype, weight_dtype=weight_dtype
-        )
-    else:
-        unet_dtype = dtype
-
     manual_cast_dtype = model_management.unet_manual_cast(
-        unet_dtype, load_device, model_config.supported_inference_dtypes
+        unet_dtype, load_device, unet_weight_dtype
     )
     model_config.set_inference_dtype(unet_dtype, manual_cast_dtype)
     model_config.custom_operations = model_options.get("custom_operations", model_config.custom_operations)
@@ -636,18 +637,18 @@ class NunchakuSDXLDiTLoaderDualCLIP:
                 ),
             },
             "optional": {
-                "enable_fa2": (
-                    "BOOLEAN",
-                    {"default": True, "tooltip": "Enable Flash Attention 2 for faster inference (requires hardware support)."},
+                "attention": (
+                    ["nunchaku-fp16", "flash-attention2"],
+                    {"default": "nunchaku-fp16", "tooltip": "Attention implementation. 'nunchaku-fp16' uses specialized kernels (default). 'flash-attention2' forces standard FA2."},
                 ),
-                "device": (["default", "cpu"], {"advanced": True}),
+
+                "cpu_offload": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "Offload model to CPU when not in use. Recommended for <4GB VRAM."},
+                ),
                 "debug": (
                     "BOOLEAN",
                     {"default": False, "tooltip": "Print detailed CLIP debug info (key detection/convert/probe)."},
-                ),
-                "debug_model": (
-                    "BOOLEAN",
-                    {"default": False, "tooltip": "Print SDXL apply_model / ControlNet debug info during sampling."},
                 ),
             },
         }
@@ -662,18 +663,28 @@ class NunchakuSDXLDiTLoaderDualCLIP:
         model_name: str,
         clip_l_name: str,
         clip_g_name: str,
-        enable_fa2: bool = True,
-        device: str = "default",
+        attention: str = "nunchaku-fp16",
+        cpu_offload: bool = True,
         debug: bool = False,
-        debug_model: bool = False,
         **kwargs,
     ):
-        # Enable/disable model-side debug prints (ControlNet mapping etc.)
-        try:
-            from ...model_base import sdxl as model_base_sdxl
-            model_base_sdxl.set_nunchaku_sdxl_debug(bool(debug_model))
-        except Exception as e:
-            logger.debug(f"Failed to set NunchakuSDXL debug flag: {e}")
+
+        # Logic for device:
+        # - Target (execution) device is ALWAYS GPU (Nunchaku requirement).
+        # - Offload (storage) device depends on cpu_offload flag.
+        target_device = model_management.get_torch_device()
+        
+        # If CPU offload is requested, storage device is CPU. otherwise GPU.
+        # If CPU offload is requested, storage device is CPU. otherwise GPU.
+        # But execution device (load_device) is ALWAYS GPU.
+        if cpu_offload:
+             offload_device = torch.device("cpu")
+             load_device = target_device # Execution on GPU
+        else:
+             offload_device = target_device
+             load_device = target_device
+        
+        logger.info(f"Loading Nunchaku SDXL: Execution={target_device}, Storage={'CPU' if cpu_offload else 'GPU'}")
 
         global _CLIP_DEBUG_CONTEXT
         _prev_debug = _CLIP_DEBUG_CONTEXT
@@ -682,9 +693,10 @@ class NunchakuSDXLDiTLoaderDualCLIP:
             # 1) Load UNet (Nunchaku SDXL).
             model_path = get_full_path_or_raise("diffusion_models", model_name)
             sd, metadata = comfy.utils.load_torch_file(model_path, return_metadata=True)
-            model = load_diffusion_model_state_dict(sd, metadata=metadata, model_options={})
+            # Pass offload_device to control behavior
+            model = load_diffusion_model_state_dict(sd, metadata=metadata, model_options={}, load_device=load_device, offload_device=offload_device)
 
-            if enable_fa2:
+            if attention == "flash-attention2":
                 try:
                     # NunchakuSDXLUNet2DConditionModel does not have a top-level set_processor method.
                     # We must iterate over all modules and find the ones that support set_processor (Attention layers).
@@ -712,6 +724,11 @@ class NunchakuSDXLDiTLoaderDualCLIP:
                         
                 except Exception as e:
                     logger.warning(f"Failed to enable Flash Attention 2: {e}")
+            else:
+                 # "nunchaku" default: Do nothing.
+                 # Nunchaku models are patched with SVDQ kernels during loading (_patch_model).
+                 # Applying generic FA2 overrides/disables these optimized kernels.
+                 logger.info(f"Using default Nunchaku attention implementation (attention='{attention}').")
 
             # 2) Load SDXL Dual CLIP (L + G).
             # We load state_dicts ourselves so we can normalize OpenCLIP/OpenAI-style keys
@@ -817,10 +834,17 @@ class NunchakuSDXLIntegratedLoader(NunchakuSDXLDiTLoaderDualCLIP):
                 "ckpt_name": (get_filename_list("checkpoints"), {"tooltip": "Unified checkpoint file (UNet + CLIP)."}),
             },
             "optional": {
-                "enable_fa2": ("BOOLEAN", {"default": True, "tooltip": "Enable Flash Attention 2."}),
-                "device": (["default", "cpu"], {"advanced": True}),
+                "attention": (
+                    ["nunchaku-fp16", "flash-attention2"],
+                    {"default": "nunchaku-fp16", "tooltip": "Attention implementation. 'nunchaku-fp16' uses specialized kernels (default). 'flash-attention2' forces standard FA2."},
+                ),
+
+                "cpu_offload": (
+                    "BOOLEAN",
+                    {"default": True, "tooltip": "Offload model to CPU when not in use. Recommended for <4GB VRAM."},
+                ),
                 "debug": ("BOOLEAN", {"default": False}),
-                 "debug_model": ("BOOLEAN", {"default": False}),
+                "debug_model": ("BOOLEAN", {"default": False}),
             },
         }
 
@@ -829,7 +853,22 @@ class NunchakuSDXLIntegratedLoader(NunchakuSDXLDiTLoaderDualCLIP):
     CATEGORY = "Nunchaku-ussoewwin"
     TITLE = "Nunchaku-ussoewwin SDXL Integrated Loader"
 
-    def load_integrated_model(self, ckpt_name, enable_fa2=True, device="default", debug=False, debug_model=False, **kwargs):
+    def load_integrated_model(self, ckpt_name, attention="nunchaku-fp16", cpu_offload=True, debug=False, debug_model=False, **kwargs):
+        # Logic for device:
+        # - Target (execution) device is ALWAYS GPU (Nunchaku requirement).
+        # - Offload (storage) device depends on cpu_offload flag.
+        target_device = model_management.get_torch_device()
+        
+        # If CPU offload is requested, storage device is CPU. otherwise GPU.
+        # But execution device (load_device) is ALWAYS GPU.
+        if cpu_offload:
+             offload_device = torch.device("cpu")
+             load_device = target_device
+        else:
+             offload_device = target_device
+             load_device = target_device
+        
+        logger.info(f"Loading Integrated Nunchaku SDXL: Execution={target_device}, Storage={'CPU' if cpu_offload else 'GPU'}")
         # 1. Load the full state dict
         ckpt_path = get_full_path_or_raise("checkpoints", ckpt_name)
         sd, metadata = comfy.utils.load_torch_file(ckpt_path, return_metadata=True)
@@ -837,9 +876,10 @@ class NunchakuSDXLIntegratedLoader(NunchakuSDXLDiTLoaderDualCLIP):
             metadata = {}
         
         # --- Load UNet (Nunchaku) ---
-        model = load_diffusion_model_state_dict(sd, metadata=metadata, model_options={})
+        # Pass offload_device to control behavior
+        model = load_diffusion_model_state_dict(sd, metadata=metadata, model_options={}, load_device=load_device, offload_device=offload_device)
 
-        if enable_fa2:
+        if attention == "flash-attention2":
              # Same FA2 logic as DualCLIP
             try:
                 unet = model.model.diffusion_model
@@ -855,6 +895,8 @@ class NunchakuSDXLIntegratedLoader(NunchakuSDXLDiTLoaderDualCLIP):
                     logger.info(f"Flash Attention 2 enabled for {count_fa2} layers.")
             except Exception as e:
                 logger.warning(f"Failed to enable Flash Attention 2: {e}")
+        else:
+             logger.info(f"Using default Nunchaku attention implementation (attention='{attention}').")
 
         # --- Load CLIP ---
         # "Unified" checkpoints have specific prefixes (conditioner.embedders...) that comfy.sd.load_clip doesn't handle.

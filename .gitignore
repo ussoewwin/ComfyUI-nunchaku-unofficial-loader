@@ -1,0 +1,31 @@
+# Markdown files
+*.md
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Backup files
+*.bak
+*.backup_*
+*_backup
+
+# Temporary files
+*.tmp
+temp_*.txt
+*.log
+keys_log.txt
+
+# Large model files
+*.safetensors
+*.pt
+*.pth
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
