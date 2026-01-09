@@ -33,7 +33,7 @@ Pre-quantized SDXL models are available at:
 
 ### Nunchaku-ussoewwin SDXL Integrated Loader
 
-⚠️ **WARNING**: Currently, for full-size non-quantized models, there is no speed advantage compared to standard ComfyUI loaders, and generation speed may actually be slower.
+⚠️ **WARNING**: Currently, for standard non-quantized models, there is no speed advantage compared to standard ComfyUI loaders, and generation speed may actually be slower.
 
 <img src="png/integrated.png" alt="Nunchaku-ussoewwin SDXL Integrated Loader Node" width="400">
 
