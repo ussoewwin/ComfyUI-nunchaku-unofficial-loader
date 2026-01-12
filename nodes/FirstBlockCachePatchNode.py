@@ -34,17 +34,17 @@ def get_fb_cache_global_cache(transformer_options, timesteps):
             'first_block_cache_count': 0,
             'start_time': time.time()
         }
-        logger.info(f"[FB Cache] Initialized cache_stats at step {attrs['step_i']:.2f}")
+        logger.debug(f"[FB Cache] Initialized cache_stats at step {attrs['step_i']:.2f}")
 
 # For Nunchaku SDXL models (UNet2DConditionModel based)
 def fb_cache_enter_sdxl(img, img_ids, txt, txt_ids, timesteps, y, guidance, control, attn_mask, transformer_options):
-    logger.info(f"[FB Cache] enter_sdxl called at step {timesteps[0].detach().cpu().item():.2f}")
+    logger.debug(f"[FB Cache] enter_sdxl called at step {timesteps[0].detach().cpu().item():.2f}")
     get_fb_cache_global_cache(transformer_options, timesteps)
     return img, img_ids, txt, txt_ids, timesteps, y, guidance, control, attn_mask
 
 # For Nunchaku Z-Image models (DiT based)
 def fb_cache_enter_zimage(img, img_ids, txt, txt_ids, timesteps, y, guidance, control, attn_mask, transformer_options):
-    logger.info(f"[FB Cache] enter_zimage called at step {timesteps[0].detach().cpu().item():.2f}")
+    logger.debug(f"[FB Cache] enter_zimage called at step {timesteps[0].detach().cpu().item():.2f}")
     get_fb_cache_global_cache(transformer_options, timesteps)
     return img, img_ids, txt, txt_ids, timesteps, y, guidance, control, attn_mask
 
@@ -98,14 +98,14 @@ def _patch_unet_for_cache(unet_model, fb_cache_attrs, residual_diff_threshold):
                     'first_block_cache_count': 0,
                     'start_time': time.time()
                 }
-                logger.info(f"[FB Cache] Initialized cache_stats at step {step_i:.2f}")
+                logger.debug(f"[FB Cache] Initialized cache_stats at step {step_i:.2f}")
 
             # Call original forward (do NOT compute previous_residual here; UNet output type/value is sampler/model dependent)
             return original_forward(sample, timestep, *args, **kwargs)
         
         unet_model.forward = types.MethodType(cached_unet_forward, unet_model)
         unet_model._fb_cache_original_forward = original_forward
-        logger.info("[FB Cache] Patched UNet forward method")
+        logger.debug("[FB Cache] Patched UNet forward method")
     
     # Then patch transformer_blocks
     _patch_unet_transformer_blocks_for_cache(unet_model, fb_cache_attrs, residual_diff_threshold)
@@ -166,7 +166,7 @@ def _patch_unet_transformer_blocks_for_cache(unet_model, fb_cache_attrs, residua
                         stats['cache_misses'] = stats.get('cache_misses', 0) + 1
                         stats['first_block_calc_count'] = stats.get('first_block_calc_count', 0) + 1
                         stats['total_steps'] = stats.get('total_steps', 0) + 1
-                        logger.info(f"[FB Cache] Step {step_i:.2f}: FORCE CALC (same timestep repeated, calc: {calc_time*1000:.2f}ms)")
+                        logger.debug(f"[FB Cache] Step {step_i:.2f}: FORCE CALC (same timestep repeated, calc: {calc_time*1000:.2f}ms)")
                         
                         # Save residual for fallback if needed later (though first block usually doesn't need it this way?)
                         # Actually first block logic is specific. We don't change it much.
@@ -196,19 +196,19 @@ def _patch_unet_transformer_blocks_for_cache(unet_model, fb_cache_attrs, residua
                             # Cache hit - use previous residual
                             stats['cache_hits'] = stats.get('cache_hits', 0) + 1
                             stats['first_block_cache_count'] = stats.get('first_block_cache_count', 0) + 1
-                            logger.info(f"[FB Cache] Step {step_i:.2f}: CACHE HIT (similarity: {similarity_check_time*1000:.2f}ms, saved: {calc_time*1000:.2f}ms)")
+                            logger.debug(f"[FB Cache] Step {step_i:.2f}: CACHE HIT (similarity: {similarity_check_time*1000:.2f}ms, saved: {calc_time*1000:.2f}ms)")
                         else:
                             # Cache miss
                             stats['cache_misses'] = stats.get('cache_misses', 0) + 1
                             stats['first_block_calc_count'] = stats.get('first_block_calc_count', 0) + 1
-                            logger.info(f"[FB Cache] Step {step_i:.2f}: CACHE MISS (similarity: {similarity_check_time*1000:.2f}ms, calc: {calc_time*1000:.2f}ms)")
+                            logger.debug(f"[FB Cache] Step {step_i:.2f}: CACHE MISS (similarity: {similarity_check_time*1000:.2f}ms, calc: {calc_time*1000:.2f}ms)")
                             cache_attrs['previous_first_block_residual'] = output.clone()
                             cache_attrs['previous_first_block_residual_mean'] = cache_attrs['previous_first_block_residual'].abs().mean()
                     else:
                         # First time, no cache
                         stats['cache_misses'] = stats.get('cache_misses', 0) + 1
                         stats['first_block_calc_count'] = stats.get('first_block_calc_count', 0) + 1
-                        logger.info(f"[FB Cache] Step {step_i:.2f}: CACHE MISS (no previous residual, calc: {calc_time*1000:.2f}ms)")
+                        logger.debug(f"[FB Cache] Step {step_i:.2f}: CACHE MISS (no previous residual, calc: {calc_time*1000:.2f}ms)")
                         cache_attrs['previous_first_block_residual'] = output.clone()
                         cache_attrs['previous_first_block_residual_mean'] = cache_attrs['previous_first_block_residual'].abs().mean()
                     
@@ -268,7 +268,7 @@ def _patch_unet_transformer_blocks_for_cache(unet_model, fb_cache_attrs, residua
                     if _patch_transformer_block(first_tb, is_first_block=True, block_uid=uid):
                         patched_count += 1
                         first_block_found = True
-                        logger.info(f"[FB Cache] Patched first transformer_block: {uid}")
+                        logger.debug(f"[FB Cache] Patched first transformer_block: {uid}")
                         break  # Only patch the first one found
     
     # Patch other blocks (not first) to respect should_calc flag
@@ -315,7 +315,7 @@ def _patch_unet_transformer_blocks_for_cache(unet_model, fb_cache_attrs, residua
                             if _patch_transformer_block(transformer_block, is_first_block=False, block_uid=uid):
                                 patched_count += 1
     
-    logger.info(f"[FB Cache] Patched {patched_count} transformer_blocks for UNet cache (first_block_found={first_block_found})")
+    logger.debug(f"[FB Cache] Patched {patched_count} transformer_blocks for UNet cache (first_block_found={first_block_found})")
 
 def fb_cache_patch_double_block_with_control_replace(original_args, wrapper_options):
     transformer_options = wrapper_options.get('transformer_options', {})
@@ -434,9 +434,9 @@ def fb_cache_patch_dit_exit(img, transformer_options):
         # Debug: log if cache_stats exists
         if 'cache_stats' in tea_cache:
             stats = tea_cache.get('cache_stats', {})
-            logger.info(f"[FB Cache] dit_exit called, cache_stats saved: total_steps={stats.get('total_steps', 0)}, hits={stats.get('cache_hits', 0)}, misses={stats.get('cache_misses', 0)}")
+            logger.debug(f"[FB Cache] dit_exit called, cache_stats saved: total_steps={stats.get('total_steps', 0)}, hits={stats.get('cache_hits', 0)}, misses={stats.get('cache_misses', 0)}")
         else:
-            logger.info(f"[FB Cache] dit_exit called, but cache_stats not found in tea_cache (keys: {list(tea_cache.keys())})")
+            logger.debug(f"[FB Cache] dit_exit called, but cache_stats not found in tea_cache (keys: {list(tea_cache.keys())})")
     else:
         logger.warning("[FB Cache] dit_exit called, but running_net_model is None")
     return img
@@ -502,7 +502,7 @@ def fb_cache_prepare_wrapper(wrapper_executor, noise, latent_image, sampler, sig
     cache_attrs["fb_cache_sampler_name"] = str(sampler_name)
     cache_attrs["fb_cache_disable_for_sampler"] = bool(disable_cache_for_sampler)
 
-    logger.info(
+    logger.debug(
         f"[FB Cache] prepare_wrapper started, diffusion_model: {type(diffusion_model).__name__}, "
         f"sampler={sampler_name}, disable_cache_for_sampler={disable_cache_for_sampler}"
     )
@@ -514,12 +514,9 @@ def fb_cache_prepare_wrapper(wrapper_executor, noise, latent_image, sampler, sig
         # Get cache statistics from diffusion_model (saved by fb_cache_patch_dit_exit)
         cache_stats = None
         has_cache_attr = hasattr(diffusion_model, fb_cache_model_temp)
-        logger.info(f"[FB Cache] prepare_wrapper finally block, hasattr({fb_cache_model_temp}): {has_cache_attr}")
         if has_cache_attr:
             cache_attrs = getattr(diffusion_model, fb_cache_model_temp, {})
-            logger.info(f"[FB Cache] cache_attrs keys: {list(cache_attrs.keys())}")
             cache_stats = cache_attrs.get('cache_stats', {})
-            logger.info(f"[FB Cache] cache_stats found: {cache_stats is not None}, keys: {list(cache_stats.keys()) if cache_stats else 'None'}")
         
         # Log cache statistics after execution
         total_time = time.time() - start_time
@@ -610,7 +607,7 @@ class NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced:
         model = model.clone()
         patch_key = "fb_cache_wrapper"
         if residual_diff_threshold == 0 or len(model.get_wrappers(comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, patch_key)) > 0:
-            logger.info(f"[FB Cache] Patch not applied: residual_diff_threshold={residual_diff_threshold}, wrapper_exists={len(model.get_wrappers(comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, patch_key)) > 0}")
+            logger.debug(f"[FB Cache] Patch not applied: residual_diff_threshold={residual_diff_threshold}, wrapper_exists={len(model.get_wrappers(comfy.patcher_extension.WrappersMP.OUTER_SAMPLE, patch_key)) > 0}")
             return (model,)
 
         diffusion_model = model.get_model_object('diffusion_model')
@@ -618,7 +615,7 @@ class NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced:
             logger.warning("First Block Cache patch is not applied because the model is not a Nunchaku model.")
             return (model,)
         
-        logger.info(f"[FB Cache] Applying patch to {type(diffusion_model).__name__}, residual_diff_threshold={residual_diff_threshold}, start_at={start_at}, end_at={end_at}")
+        logger.debug(f"[FB Cache] Applying patch to {type(diffusion_model).__name__}, residual_diff_threshold={residual_diff_threshold}, start_at={start_at}, end_at={end_at}")
 
         fb_cache_attrs = add_model_patch_option(model, fb_cache_key_attrs)
 
@@ -637,7 +634,7 @@ class NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced:
         # Use appropriate patch method based on Nunchaku model type
         if is_nunchaku_zimage_model(diffusion_model):
             # Z-Image is DiT-based, use DiT patches
-            logger.info(f"[FB Cache] Setting patch for Z-Image model: {PatchKeys.options_key}, {PatchKeys.dit_enter}")
+            logger.debug(f"[FB Cache] Setting patch for Z-Image model: {PatchKeys.options_key}, {PatchKeys.dit_enter}")
             set_model_patch(model, PatchKeys.options_key, fb_cache_enter_zimage, PatchKeys.dit_enter)
             set_model_patch_replace(model, PatchKeys.options_key, fb_cache_patch_double_block_with_control_replace, PatchKeys.dit_double_block_with_control_replace)
             set_model_patch_replace(model, PatchKeys.options_key, fb_cache_patch_blocks_transition_replace, PatchKeys.dit_blocks_transition_replace)
@@ -647,17 +644,17 @@ class NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced:
             set_model_patch(model, PatchKeys.options_key, fb_cache_patch_dit_exit, PatchKeys.dit_exit)
         elif is_nunchaku_sdxl_model(diffusion_model):
             # SDXL is UNet-based, need to patch UNet's forward and transformer_blocks directly
-            logger.info(f"[FB Cache] Patching UNet forward and transformer_blocks for SDXL model")
+            logger.debug(f"[FB Cache] Patching UNet forward and transformer_blocks for SDXL model")
             _patch_unet_for_cache(diffusion_model, fb_cache_attrs, residual_diff_threshold)
         else:
             logger.warning(f"[FB Cache] Unknown Nunchaku model type: {type(diffusion_model).__name__}")
 
         # Just add it once when connecting in series
-        logger.info(f"[FB Cache] Adding wrapper: {patch_key}")
+        logger.debug(f"[FB Cache] Adding wrapper: {patch_key}")
         model.add_wrapper_with_key(comfy.patcher_extension.WrappersMP.OUTER_SAMPLE,
                                    patch_key,
                                    fb_cache_prepare_wrapper
                                    )
-        logger.info("[FB Cache] Patch applied successfully")
+        logger.debug("[FB Cache] Patch applied successfully")
         return (model, )
 
