@@ -153,6 +153,11 @@ A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node pr
 
 ## Changelog
 
+### Version 2.6.1
+
+- Optimized LoRA processing performance for SDXL models
+- See [Release Notes v2.6.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.6.1) for details
+
 ### Version 2.6
 
 - Fixed ControlNet support for SDXL models (OpenPose, Depth, Canny, etc.)
