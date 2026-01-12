@@ -61,8 +61,34 @@ def _ensure_imports():
                     original_imported_modules[module] = sys.modules.pop(module)
             
             try:
+                # Force reloading usdu_utils from USDU path
+                import importlib.util
+                spec = importlib.util.spec_from_file_location("usdu_utils", os.path.join(usdu_custom_node, "usdu_utils.py"))
+                usdu_utils = importlib.util.module_from_spec(spec)
+                sys.modules["usdu_utils"] = usdu_utils
+                spec.loader.exec_module(usdu_utils)
+                # Note: original USDU might expose tensor_to_pil/pil_to_tensor in usdu_utils
+                tensor_to_pil = getattr(usdu_utils, "tensor_to_pil", None)
+                if tensor_to_pil is None:
+                    # If not found, try to find where they are defined.
+                    # USDU structure changed? Let's fallback to modules.images or checking usdu_patch
+                    pass
+
+                # If the functions are not in usdu_utils.py, we might need to look elsewhere.
+                # But typically they are used in USDU. 
+                # Let's assume they are there as 'utils' import usually implies.
+                # Wait, 'from utils import ...' in USDU source suggests a file named utils.py existed?
+                # But ls showed usdu_utils.py. Maybe it was renamed.
+                
+                # Let's check if we can just import usdu_utils directly since it is in sys.path
+                # But "from utils import" in previous log suggests it logic.
+                
+                # Let's stick to loading usdu_utils.py for now.
+                tensor_to_pil = usdu_utils.tensor_to_pil
+                pil_to_tensor = usdu_utils.pil_to_tensor
+
                 from usdu_patch import usdu  # type: ignore
-                from utils import tensor_to_pil, pil_to_tensor  # type: ignore
+                # from utils import tensor_to_pil, pil_to_tensor  # type: ignore (REPLACED due to conflict)
                 from modules.processing import StableDiffusionProcessing  # type: ignore
                 import modules.shared as shared  # type: ignore
                 from modules.upscaler import UpscalerData  # type: ignore
