@@ -56,7 +56,7 @@ def benchmark_with_without_lora():
         "time_ids": torch.tensor([[1024, 1024, 0, 0, 1024, 1024]], device="cuda", dtype=torch.float32),
     }
 
-    # ウォームアップ
+    # Warmup
     with torch.no_grad():
         for _ in range(3):
             out = unet(sample, timestep, encoder_hidden_states, added_cond_kwargs=added_cond_kwargs)
@@ -93,7 +93,7 @@ def benchmark_with_without_lora():
     up_t = torch.randn(lora_rank, out_features, device="cuda", dtype=torch.bfloat16)
     x_lora = torch.randn(seq_len, in_features, device="cuda", dtype=torch.bfloat16)
 
-    # ウォームアップ
+    # Warmup
     for _ in range(10):
         add = (x_lora @ down_t) @ up_t
     torch.cuda.synchronize()
