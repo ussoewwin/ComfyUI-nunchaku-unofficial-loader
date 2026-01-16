@@ -3,11 +3,15 @@
 <img src="https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/icon.png" width="128">
 </p>
 
+<div align="center">
+
 ## ⚠️ WARNING
 
 This is an **UNOFFICIAL** test version of the node.  
 It may not work correctly depending on your environment.  
 **(Unfortunately, no speed advantage at present)**
+
+</div>
 
 These are Nunchaku unofficial loaders for using SDXL models quantized with SVDQ (SVDQuant) method, based on [ComfyUI-nunchaku](https://github.com/nunchaku-ai/ComfyUI-nunchaku) with custom additions.
 
