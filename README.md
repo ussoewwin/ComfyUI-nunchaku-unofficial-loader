@@ -33,6 +33,8 @@ If you are using Nunchaku with CUDA 13.0 (cu130), use these quantized models:
 
 Sample ComfyUI workflows are available in the `sample` directory. These workflows demonstrate how to use the Nunchaku SDXL loaders and can be imported directly into ComfyUI.
 
+<img src="png/sample.png" alt="Sample Workflow" width="400">
+
 - **[sdxltest.json](sample/sdxltest.json)** - Sample workflow demonstrating Nunchaku SDXL model loading and generation. This workflow showcases the basic usage of Nunchaku SDXL Integrated Loader with a complete generation pipeline.
 
 To use these workflows:
