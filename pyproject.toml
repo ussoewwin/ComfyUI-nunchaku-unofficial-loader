@@ -128,7 +128,7 @@ line_length = 120
 PublisherId = "ussoewwin"
 DisplayName = "ComfyUI-nunchaku-unofficial-loader"
 Id = "a88e4ec0-69a4-407b-831a-4913cd98f4d1"
-Icon = "https://raw.githubusercontent.com/nunchaku-tech/nunchaku/96615bd93a1f0d2cf98039fddecfec43ce34cc96/assets/nunchaku.svg"
+Icon = "https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/icon.png"
 
 [tool.doc8]
 max-line-length = 120
