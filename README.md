@@ -257,6 +257,40 @@ A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node pr
 
 - Fixed import error for `NunchakuZImageDiTLoader` node by improving alternative import method with better path resolution (see [Issue #1](issues/1))
 
-## License
+## Safety & License Notice
 
-Licensed under the Apache License, Version 2.0. See [LICENCE.txt](LICENCE.txt) for details.
+### Model Distribution & Usage
+
+* This repository **does NOT distribute any model checkpoints**, weights, or training data.
+* All model files (including SDXL checkpoints, quantized UNet files, CLIP, VAE, LoRA, and ControlNet models) **must be obtained separately by the user**.
+* Users are solely responsible for ensuring that **all downloaded or generated model files comply with their respective licenses** (e.g., CreativeML Open RAIL, Apache-2.0, custom research licenses, etc.).
+* The author does **not grant any rights** to redistribute, modify, or use third-party models beyond what is permitted by their original licenses.
+
+### Quantized & Derived Models
+
+* Quantized models (e.g., SVDQ / FP4 / INT4) are considered **derivative works** of the original checkpoints.
+* Before sharing or redistributing quantized models, verify that the **original model license explicitly allows redistribution and derivative works**.
+* Many SDXL-based models **do not permit redistribution**, even in quantized form.
+
+### Experimental / Unofficial Status
+
+* This project is an **UNOFFICIAL and experimental implementation**.
+* It is **not affiliated with, endorsed by, or supported by the Nunchaku or ComfyUI core teams**.
+* Behavior, performance, and compatibility may change without notice.
+* Use at your own risk.
+
+## License (Apache License 2.0)
+
+This project is licensed under the **Apache License, Version 2.0**.
+
+### Key Points
+
+* You are free to **use, modify, and distribute** this software, including for commercial purposes.
+* You **must retain**:
+  * The original copyright notice
+  * A copy of the Apache-2.0 license
+  * Any existing NOTICE files (if present)
+* If you modify the source code, you **must clearly indicate** that changes were made.
+* This software is provided **"AS IS"**, without warranties or conditions of any kind.
+
+See the full license text in [`LICENCE.txt`](./LICENCE.txt).
