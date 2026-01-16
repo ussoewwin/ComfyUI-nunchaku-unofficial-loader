@@ -15,7 +15,7 @@ It may not work correctly depending on your environment.<br>
 
 </div>
 
-These are Nunchaku unofficial loaders, based on [ComfyUI-nunchaku](https://github.com/nunchaku-ai/ComfyUI-nunchaku) with custom additions.
+These are Nunchaku unofficial loaders for using SDXL models quantized with SVDQ (SVDQuant) method, based on [ComfyUI-nunchaku](https://github.com/nunchaku-ai/ComfyUI-nunchaku) with custom additions.
 
 ## Installation
 
