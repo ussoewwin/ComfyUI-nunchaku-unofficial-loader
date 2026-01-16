@@ -1,6 +1,4 @@
-<div align="center">
-  <img src="https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/icon.png" alt="icon" width="64"></img>
-</div>
+![ComfyUI-nunchaku-unofficial-loader](icon.png)
 
 <div align="center">
 
