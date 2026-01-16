@@ -50,6 +50,12 @@ Sample ComfyUI workflows are available in the `sample` directory. These workflow
 
 - **[sdxltest.json](sample/sdxltest.json)** - Sample workflow demonstrating Nunchaku SDXL model loading and generation. This workflow showcases the basic usage of Nunchaku SDXL Integrated Loader with a complete generation pipeline.
 
+**Required additional nodes (for sample workflows):**
+
+- **[ComfyUI-NunchakuFluxLoraStacker](https://github.com/ussoewwin/ComfyUI-NunchakuFluxLoraStacker)** - Required for LoRA functionality
+- **[ComfyUI-DistorchMemoryManager](https://github.com/ussoewwin/ComfyUI-DistorchMemoryManager)** - Required for memory management
+- **[ComfyUI_ControlAltAI_Nodes](https://github.com/ussoewwin/ComfyUI_ControlAltAI_Nodes)** - Required for ControlNet features
+
 To use these workflows:
 1. Download the JSON file from the `sample` directory
 2. Import it into ComfyUI using the "Load" button
