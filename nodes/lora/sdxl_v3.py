@@ -221,11 +221,10 @@ def _coverage_report_for_unet(
     debug: bool,
 ) -> dict:
     """
-    "完全にマッピング" のための可観測性:
-    UNet系ベースキーが
-      - standard (key_mapに存在) or
-      - runtime (SVDQ runtimeで処理)
-    のどちらかに全て割り当てられていることを確認する。
+    Observability for "complete mapping":
+    Verify that all UNet-related base keys are assigned to either
+      - standard (exists in key_map) or
+      - runtime (processed by SVDQ runtime)
     """
     # Collect UNet-related keys and bases.
     bases: set[str] = set()
@@ -290,7 +289,7 @@ def _coverage_report_for_unet(
                 unmapped_key_samples.append(k)
 
     stats = {
-        # base-level coverage (what "完全にマッピング" refers to)
+        # base-level coverage (complete mapping)
         "unet_bases_total": len(bases),
         "standard_bases": len(standard_bases),
         "runtime_bases": len(runtime_hit),
@@ -350,7 +349,7 @@ def _lora_base_key_from_any(k: str) -> str:
     Normalize "base key" extraction across all ComfyUI weight adapters.
 
     comfy.lora.load_lora() decides whether a key is loadable by comparing the *base* (prefix)
-    against model key_map. For "完全にマッピング" auditing, we must collapse adapter-specific
+    against model key_map. For complete mapping auditing, we must collapse adapter-specific
     suffixes into the same base consistently.
     """
     if not isinstance(k, str) or not k:
@@ -1258,7 +1257,7 @@ def _prefix_bucket(k: str, max_parts: int = 4) -> str:
 
 def _best_suffix_candidates(query: str, candidates: list[str], topn: int = 5) -> list[str]:
     """
-    Very cheap "候補提示":
+    Very cheap candidate suggestion:
     - Compare by common suffix length (string) to suggest nearest key_map keys.
     """
     if not query:
@@ -1337,8 +1336,8 @@ def _lora_unet_base_to_possible_state_dict_weights(lora_unet_base: str) -> list[
 
 def _detect_lora_type(sd: dict) -> dict:
     """
-    QI/ZIT並みに「LoRAタイプ判別」を出すための簡易ヒューリスティック。
-    ここで言う "type" は厳密な規格名ではなく、キーの傾向からの推定。
+    Simple heuristic to detect LoRA type like QI/ZIT.
+    The "type" here is not a strict specification name, but an estimation based on key patterns.
     """
     keys = [k for k in sd.keys() if isinstance(k, str)]
     key_set = set(keys)
@@ -1970,12 +1969,12 @@ def _apply_lora_filtered(model, clip, lora_sd, strength_model: float, strength_c
 
 def _apply_lora_verbose_like_qi(model, clip, lora_sd, strength_model: float, strength_clip: float, debug: bool):
     """
-    QI/ZIT側と同じ「大量ログ（未ロードキーを全部吐く）」で検証できるように、
-    comfy.sd.load_lora_for_models() を“そのまま”使う。
+    Same as QI/ZIT: verbose logging (dump all unloaded keys) for verification,
+    using comfy.sd.load_lora_for_models() as-is.
     """
     if debug:
         # ------------------------------------------------------------------
-        # QI/ZIT並みの「巨大ログ」：型情報＋当たり判定＋候補提示まで一気に出す
+        # QI/ZIT-level verbose log: type info + hit detection + candidate suggestion all at once
         # ------------------------------------------------------------------
         _dbg_print(debug, f"[NUNCHAKU_SDXL_LORA_DEBUG] 🔍 model type: '{type(model).__name__}'")
         _dbg_print(debug, f"[NUNCHAKU_SDXL_LORA_DEBUG] 🔍 model module: {type(model).__module__}")
@@ -1985,7 +1984,7 @@ def _apply_lora_verbose_like_qi(model, clip, lora_sd, strength_model: float, str
         _dbg_print(debug, f"[NUNCHAKU_SDXL_LORA_DEBUG] 🔍 clip type: '{type(clip).__name__}' module={type(clip).__module__}")
         _dbg_print(debug, f"[NUNCHAKU_SDXL_LORA_DEBUG] 🔍 clip has 'cond_stage_model'? {hasattr(clip, 'cond_stage_model')}")
 
-        # ---- target model structure probe (SDXL UNet側が patchable かの確定) ----
+        # ---- target model structure probe (check if SDXL UNet is patchable) ----
         try:
             base = getattr(model, "model", None)
             _dbg_print(debug, f"[NUNCHAKU_SDXL_LORA_DEBUG] model.model={_safe_type_info(base)}")
@@ -2004,7 +2003,7 @@ def _apply_lora_verbose_like_qi(model, clip, lora_sd, strength_model: float, str
         except Exception as e:
             _dbg_print(debug, f"[NUNCHAKU_SDXL_LORA_DEBUG] model structure probe failed: {e}")
 
-        # ---- key_map (ComfyUIと同じ) ----
+        # ---- key_map (same as ComfyUI) ----
         key_map_unet = {}
         key_map_clip = {}
         key_map_all = {}
@@ -2043,7 +2042,7 @@ def _apply_lora_verbose_like_qi(model, clip, lora_sd, strength_model: float, str
             except Exception as e:
                 _dbg_print(debug, f"[NUNCHAKU_SDXL_LORA_DEBUG] key_map sample dump failed: {e}")
 
-        # ---- LoRA type detection (QI/ZIT並みに表示) ----
+        # ---- LoRA type detection (same as QI/ZIT) ----
         try:
             lora_type = _detect_lora_type(lora_sd)
             _dbg_print(debug, f"[NUNCHAKU_SDXL_LORA_DEBUG] LoRA type detection: tags={lora_type['tags']}")
@@ -2135,7 +2134,7 @@ def _apply_lora_verbose_like_qi(model, clip, lora_sd, strength_model: float, str
             except Exception as e:
                 _dbg_print(debug, f"[NUNCHAKU_SDXL_LORA_DEBUG] miss->state_dict weight probe failed: {e}")
 
-            # very small "候補提示" for a few misses
+            # very small candidate suggestion for a few misses
             if miss_bases and key_map_all:
                 km_keys = list(key_map_all.keys())
                 show_n = 8
@@ -2143,7 +2142,7 @@ def _apply_lora_verbose_like_qi(model, clip, lora_sd, strength_model: float, str
                     cand = _best_suffix_candidates(b, km_keys, topn=5)
                     _dbg_print(debug, f"[NUNCHAKU_SDXL_LORA_DEBUG] suggest for miss_base='{b}' -> {cand}")
 
-            # sanity: if unet key_map is empty, UNetには絶対当たらない
+            # sanity: if unet key_map is empty, UNet will never match
             if len(key_map_unet) == 0:
                 _dbg_print(
                     debug,
@@ -2154,8 +2153,8 @@ def _apply_lora_verbose_like_qi(model, clip, lora_sd, strength_model: float, str
         except Exception as e:
             _dbg_print(debug, f"[NUNCHAKU_SDXL_LORA_DEBUG] lora convert/hit-test failed: {e}")
 
-    # これが重要：未ロードキーは comfy/lora.py が大量に warning を出す（QI/ZITと同じ検証圧）
-    # ただし SDXL A1111形式はキー変換が必要なので、適用側も変換後sdを渡す。
+    # This is important: unloaded keys will generate many warnings from comfy/lora.py (same verification pressure as QI/ZIT)
+    # However, SDXL A1111 format requires key conversion, so the application side also passes converted sd.
     lora_sd_to_apply = lora_sd
     try:
         lora_sd_to_apply, _ = _convert_a1111_unet_lora_keys_to_comfy_diffusers(lora_sd, model, debug)
