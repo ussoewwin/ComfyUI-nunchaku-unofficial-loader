@@ -1,5 +1,5 @@
 """
-ComfyUIと同じフローでNunchaku SDXLをテスト - 直接実装
+Test Nunchaku SDXL with same flow as ComfyUI - direct implementation
 """
 
 import torch
@@ -20,7 +20,7 @@ def benchmark_comfyui_flow():
     from comfy.model_base import ModelType, SDXL
     
     print("=" * 60)
-    print("Nunchaku SDXL: _apply_model経由 vs 直接呼び出し")
+    print("Nunchaku SDXL: via _apply_model vs direct call")
     print("=" * 60)
 
     gpu_name = torch.cuda.get_device_name(0)
@@ -51,7 +51,7 @@ def benchmark_comfyui_flow():
     print("Model loaded.")
     print()
 
-    # テスト入力
+    # Test input
     batch_size = 1
     latent_size = 128
     dtype = torch.bfloat16
@@ -64,8 +64,8 @@ def benchmark_comfyui_flow():
         "time_ids": torch.tensor([[1024, 1024, 0, 0, 1024, 1024]], device="cuda", dtype=torch.float32),
     }
 
-    # [1] 直接UNet呼び出し（スタンドアロン）
-    print("[1] 直接UNet呼び出し（スタンドアロン）")
+    # [1] Direct UNet call (standalone)
+    print("[1] Direct UNet call (standalone)")
     with torch.no_grad():
         for _ in range(3):
             out = unet(sample, timestep, context, added_cond_kwargs=added_cond_kwargs)
@@ -81,11 +81,11 @@ def benchmark_comfyui_flow():
     print(f"    Time: {time_direct:.2f} ms/iter")
     print(f"    it/s: {1000 / time_direct:.2f}")
 
-    # [2] NunchakuSDXL._apply_model経由のシミュレーション
+    # [2] Simulation via NunchakuSDXL._apply_model
     print()
-    print("[2] _apply_modelの処理をシミュレート")
+    print("[2] Simulate _apply_model processing")
     
-    # model_samplingの動作をシミュレート
+    # Simulate model_sampling behavior
     from comfy.model_sampling import ModelSamplingDiscrete
     import comfy.supported_models
 
@@ -96,12 +96,12 @@ def benchmark_comfyui_flow():
     
     with torch.no_grad():
         for _ in range(3):
-            # _apply_modelの処理をシミュレート
+            # Simulate _apply_model processing
             xc = model_sampling.calculate_input(sigma, sample)
             xc = xc.to(dtype)
             t_step = model_sampling.timestep(sigma).float()
             
-            # UNet呼び出し
+            # UNet call
             model_output = unet(
                 sample=xc,
                 timestep=t_step,
@@ -141,9 +141,9 @@ def benchmark_comfyui_flow():
 
     print()
     print("=" * 60)
-    print(f"直接呼び出し:        {time_direct:.2f} ms")
-    print(f"_apply_model経由:    {time_apply_model:.2f} ms")
-    print(f"オーバーヘッド:      {time_apply_model - time_direct:.2f} ms ({(time_apply_model/time_direct - 1)*100:.1f}%)")
+    print(f"Direct call:         {time_direct:.2f} ms")
+    print(f"Via _apply_model:    {time_apply_model:.2f} ms")
+    print(f"Overhead:            {time_apply_model - time_direct:.2f} ms ({(time_apply_model/time_direct - 1)*100:.1f}%)")
     print("=" * 60)
 
 

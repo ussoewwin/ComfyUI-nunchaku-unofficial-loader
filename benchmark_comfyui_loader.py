@@ -1,5 +1,5 @@
 """
-ComfyUIのローダー関数を使ってモデルをロードし、直接呼び出して測定
+Load model using ComfyUI loader function and measure by direct calls
 """
 
 import torch
@@ -21,7 +21,7 @@ import comfy.model_management as model_management
 from nodes.models.sdxl import load_diffusion_model_state_dict
 
 print("=" * 60)
-print("ComfyUIローダー関数 経由でロード → 直接呼び出し")
+print("Load via ComfyUI loader function → direct call")
 print("=" * 60)
 
 gpu_name = torch.cuda.get_device_name(0)
@@ -44,7 +44,7 @@ load_device = model_management.get_torch_device()
 model_patcher.load(device_to=load_device)
 unet = model_patcher.model.diffusion_model
 
-# テスト入力
+# Test input
 batch_size = 1
 latent_size = 128
 dtype = torch.bfloat16
@@ -64,8 +64,8 @@ with torch.no_grad():
         out = unet(sample, timestep, context, added_cond_kwargs=added_cond_kwargs)
         torch.cuda.synchronize()
 
-# 直接呼び出し
-print("\n[1] ComfyUIローダー経由 → 直接呼び出し:")
+# Direct call
+print("\n[1] Via ComfyUI loader → direct call:")
 times = []
 with torch.no_grad():
     for _ in range(20):
@@ -76,8 +76,8 @@ with torch.no_grad():
         times.append((time.time() - start) * 1000)
 print(f"    Time: {sum(times)/len(times):.2f} ms/iter")
 
-# _apply_model経由
-print("\n[2] _apply_model経由:")
+# Via _apply_model
+print("\n[2] Via _apply_model:")
 model = model_patcher.model
 sigma = torch.tensor([0.5], device="cuda", dtype=dtype)
 
