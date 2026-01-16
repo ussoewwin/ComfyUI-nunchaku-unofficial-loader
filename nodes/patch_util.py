@@ -5,7 +5,7 @@ class PatchKeys:
     ################## transformer_options patches ##################
     options_key = "patches_point"
     running_net_model = "running_net_model"
-    # patches_point下支持设置的补丁
+    # patches supported under patches_point
     dit_enter = "patch_dit_enter"
     dit_blocks_before = "patch_dit_blocks_before"
     dit_double_blocks_replace = "patch_dit_double_blocks_replace"
