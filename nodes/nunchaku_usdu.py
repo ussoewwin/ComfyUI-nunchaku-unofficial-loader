@@ -213,9 +213,46 @@ def rename_input(inputs: list, old_name: str, new_name: str):
 class NunchakuUltimateSDUpscale:
     @classmethod
     def INPUT_TYPES(s):
-        _ensure_imports()
-        required, optional = USDU_base_inputs()
-        return prepare_inputs(required, optional)
+        try:
+            _ensure_imports()
+            required, optional = USDU_base_inputs()
+            return prepare_inputs(required, optional)
+        except Exception as e:
+            logger.error(f"Failed to initialize NunchakuUltimateSDUpscale INPUT_TYPES: {e}", exc_info=True)
+            # Provide fallback with default modes to allow node registration even if imports fail
+            # This ensures the node appears in the UI even if ComfyUI_UltimateSDUpscale is not properly installed
+            fallback_modes = ["Linear", "Chess", "None"] if not MODES else list(MODES.keys())
+            fallback_seam_modes = ["None", "Band Pass", "Half Tile", "Half Tile + Intersections"] if not SEAM_FIX_MODES else list(SEAM_FIX_MODES.keys())
+            
+            required = [
+                ("image", ("IMAGE", {"tooltip": "The image to upscale."})),
+                ("model", ("MODEL", {"tooltip": "The model to use for image-to-image."})),
+                ("positive", ("CONDITIONING", {"tooltip": "The positive conditioning for each tile."})),
+                ("negative", ("CONDITIONING", {"tooltip": "The negative conditioning for each tile."})),
+                ("vae", ("VAE", {"tooltip": "The VAE model to use for tiles."})),
+                ("upscale_by", ("FLOAT", {"default": 2, "min": 0.05, "max": 4, "step": 0.05, "tooltip": "The factor to upscale the image by."})),
+                ("seed", ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "tooltip": "The seed to use for image-to-image."})),
+                ("steps", ("INT", {"default": 20, "min": 1, "max": 10000, "step": 1, "tooltip": "The number of steps to use for each tile."})),
+                ("cfg", ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "tooltip": "The CFG scale to use for each tile."})),
+                ("sampler_name", (comfy.samplers.KSampler.SAMPLERS, {"tooltip": "The sampler to use for each tile."})),
+                ("scheduler", (comfy.samplers.KSampler.SCHEDULERS, {"tooltip": "The scheduler to use for each tile."})),
+                ("denoise", ("FLOAT", {"default": 0.2, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "The denoising strength to use for each tile."})),
+                ("upscale_model", ("UPSCALE_MODEL", {"tooltip": "The upscaler model for upscaling the image."})),
+                ("mode_type", (fallback_modes, {"tooltip": "The tiling order to use for the redraw step."})),
+                ("tile_width", ("INT", {"default": 512, "min": 64, "max": MAX_RESOLUTION, "step": 8, "tooltip": "The width of each tile."})),
+                ("tile_height", ("INT", {"default": 512, "min": 64, "max": MAX_RESOLUTION, "step": 8, "tooltip": "The height of each tile."})),
+                ("mask_blur", ("INT", {"default": 8, "min": 0, "max": 64, "step": 1, "tooltip": "The blur radius for the mask."})),
+                ("tile_padding", ("INT", {"default": 32, "min": 0, "max": MAX_RESOLUTION, "step": 8, "tooltip": "The padding to apply between tiles."})),
+                ("seam_fix_mode", (fallback_seam_modes, {"tooltip": "The seam fix mode to use."})),
+                ("seam_fix_denoise", ("FLOAT", {"default": 1.0, "min": 0.0, "max": 1.0, "step": 0.01, "tooltip": "The denoising strength to use for the seam fix."})),
+                ("seam_fix_width", ("INT", {"default": 64, "min": 0, "max": MAX_RESOLUTION, "step": 8, "tooltip": "The width of the bands used for the Band Pass seam fix mode."})),
+                ("seam_fix_mask_blur", ("INT", {"default": 8, "min": 0, "max": 64, "step": 1, "tooltip": "The blur radius for the seam fix mask."})),
+                ("seam_fix_padding", ("INT", {"default": 16, "min": 0, "max": MAX_RESOLUTION, "step": 8, "tooltip": "The padding to apply for the seam fix tiles."})),
+                ("force_uniform_tiles", ("BOOLEAN", {"default": True, "tooltip": "Force all tiles to be the same as the set tile size, even when tiles could be smaller. This can help prevent the model from working with irregular tile sizes."})),
+                ("tiled_decode", ("BOOLEAN", {"default": False, "tooltip": "Whether to use tiled decoding when decoding tiles."})),
+            ]
+            optional = []
+            return prepare_inputs(required, optional)
 
     RETURN_TYPES = ("IMAGE",)
     FUNCTION = "upscale"
