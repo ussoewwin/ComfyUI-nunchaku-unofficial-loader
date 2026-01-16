@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 requires = [ "setuptools>=61", "wheel" ]
 
 [project]
-name = "comfyui-nunchaku"
+name = "comfyui-nunchaku-unofficial-loader"
 version = "1.0.2"
 description = "Unofficial Nunchaku SDXL Dit Loader with LoRA loader, Upscaler"
 license = { file = "LICENCE.txt" }
@@ -85,7 +85,7 @@ optional-dependencies.torch27 = [ "nunchaku==1.0.1+torch2.7; sys_platform!='darw
 optional-dependencies.torch28 = [ "nunchaku==1.0.1+torch2.8; sys_platform!='darwin'", "torch>=2.8,<2.9" ]
 # when working with pre-release torch, we don't know what the version string will be, so let's omit it
 optional-dependencies.torchpre = [ "nunchaku==1.0.1+torch2.10; sys_platform!='darwin'" ]
-urls.Repository = "https://github.com/nunchaku-tech/ComfyUI-nunchaku"
+urls.Repository = "https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader"
 entry-points."comfyui.custom_nodes".comfyui_nunchaku = "comfyui_nunchaku"
 
 [tool.setuptools]
