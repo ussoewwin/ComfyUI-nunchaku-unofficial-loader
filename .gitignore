@@ -35,3 +35,6 @@ keys_log.txt
 # OS
 .DS_Store
 Thumbs.db
+
+# ComfyUI-nunchaku directory
+ComfyUI-nunchaku/
