@@ -7,7 +7,7 @@
 
 ## ⚠️ WARNING
 
-This is an **UNOFFICIAL** test version of the node.  
+This is an **UNOFFICIAL** test version of this node.  
 It may not work correctly depending on your environment.  
 **(Unfortunately, no speed advantage at present)**
 
