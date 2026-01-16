@@ -1,6 +1,8 @@
+# ComfyUI-nunchaku-unofficial-loader
 <p align="center">
 <img src="https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/icon.png" width="128">
 </p>
+**ComfyUI-nunchaku-unofficial-loader** These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom additions.
 
 <div align="center">
 
