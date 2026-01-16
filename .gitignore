@@ -6,6 +6,7 @@ md/
 !README.md
 # TOML files
 *.toml
+!pyproject.toml
 
 # Python cache
 __pycache__/
