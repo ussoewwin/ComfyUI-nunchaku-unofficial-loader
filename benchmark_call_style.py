@@ -100,7 +100,7 @@ with torch.no_grad():
         times.append((time.time() - start) * 1000)
 print(f"    Time: {sum(times)/len(times):.2f} ms/iter")
 
-# [3] return_dict=True（デフォルト）
+# [3] return_dict=True (default)
 print("\n[3] return_dict=True:")
 times = []
 with torch.no_grad():
