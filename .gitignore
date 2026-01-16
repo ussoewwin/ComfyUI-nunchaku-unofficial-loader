@@ -1,11 +1,11 @@
 # Markdown files directory (technical documentation)
 md/
 
-# Individual markdown files (except README.md and pyproject.toml)
+# Individual markdown files (except README.md)
 *.md
 !README.md
+# TOML files
 *.toml
-!pyproject.toml
 
 # Python cache
 __pycache__/

@@ -1,0 +1,1942 @@
+{
+  "id": "87bce87c-da52-491a-8ae6-c161f2986eb0",
+  "revision": 0,
+  "last_node_id": 54,
+  "last_link_id": 123,
+  "nodes": [
+    {
+      "id": 3,
+      "type": "CLIPTextEncode",
+      "pos": [
+        1247.0050570893095,
+        494.650594960623
+      ],
+      "size": [
+        475.171875,
+        214
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 20,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 68
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            27,
+            91
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "CLIPTextEncode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "best quality,master piece,A cute rabbit,"
+      ]
+    },
+    {
+      "id": 4,
+      "type": "KSampler",
+      "pos": [
+        1850.049401942213,
+        419.04633829365366
+      ],
+      "size": [
+        270,
+        414
+      ],
+      "flags": {
+        "collapsed": false
+      },
+      "order": 25,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 86
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 102
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 103
+        },
+        {
+          "name": "latent_image",
+          "type": "LATENT",
+          "link": 56
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            113
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "KSampler",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        988706233118054,
+        "randomize",
+        16,
+        7,
+        "euler",
+        "beta",
+        1
+      ]
+    },
+    {
+      "id": 5,
+      "type": "VAEDecode",
+      "pos": [
+        2211.0878444593077,
+        413.85275282208875
+      ],
+      "size": [
+        225,
+        162
+      ],
+      "flags": {},
+      "order": 26,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "samples",
+          "type": "LATENT",
+          "link": 113
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 6
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            114,
+            119
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "VAEDecode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 6,
+      "type": "PreviewImage",
+      "pos": [
+        2567.326900725339,
+        392.64744512665413
+      ],
+      "size": [
+        225,
+        385
+      ],
+      "flags": {},
+      "order": 29,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 123
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "PreviewImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 7,
+      "type": "VAELoader",
+      "pos": [
+        -238.88636331108,
+        618.3180834941785
+      ],
+      "size": [
+        270,
+        172
+      ],
+      "flags": {},
+      "order": 0,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "VAE",
+          "type": "VAE",
+          "links": [
+            6,
+            32,
+            93
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "VAELoader",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "sdxl_vae.safetensors"
+      ]
+    },
+    {
+      "id": 18,
+      "type": "LoadImage",
+      "pos": [
+        -777.8606928184789,
+        1577.817411911796
+      ],
+      "size": [
+        280,
+        466
+      ],
+      "flags": {},
+      "order": 1,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            62
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "LoadImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "ComfyUI_0018 (1).png",
+        "image"
+      ]
+    },
+    {
+      "id": 19,
+      "type": "ControlNetLoader",
+      "pos": [
+        -426.84423355746065,
+        1831.3468539691785
+      ],
+      "size": [
+        432.765625,
+        172
+      ],
+      "flags": {},
+      "order": 2,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CONTROL_NET",
+          "type": "CONTROL_NET",
+          "links": [
+            33,
+            52
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "ControlNetLoader",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "controlnet-union-pro-max-sdxl-1.0.safetensors"
+      ]
+    },
+    {
+      "id": 28,
+      "type": "AIO_Preprocessor",
+      "pos": [
+        1218.9256614923463,
+        1602.112407635704
+      ],
+      "size": [
+        411.15625,
+        206
+      ],
+      "flags": {},
+      "order": 14,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 110
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            54,
+            55
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui_controlnet_aux",
+        "ver": "136f125c89aed92ced1b6fbb491e13719b72fcc0",
+        "Node name for S&R": "AIO_Preprocessor",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "DepthAnythingV2Preprocessor",
+        768
+      ]
+    },
+    {
+      "id": 29,
+      "type": "PreviewImage",
+      "pos": [
+        2038.1455402743795,
+        1547.302315854747
+      ],
+      "size": [
+        225,
+        385
+      ],
+      "flags": {},
+      "order": 18,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 55
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "PreviewImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 31,
+      "type": "MegapixelCalculatorNode",
+      "pos": [
+        -229.48046241167253,
+        866.1484040337424
+      ],
+      "size": [
+        325.890625,
+        380
+      ],
+      "flags": {},
+      "order": 3,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "links": [
+            57
+          ]
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "links": [
+            59
+          ]
+        },
+        {
+          "name": "resolution",
+          "type": "STRING",
+          "links": null
+        },
+        {
+          "name": "preview",
+          "type": "IMAGE",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui_controlaltai_nodes",
+        "ver": "721492b66c9cede8ae23ae10615462ad80cfd061",
+        "Node name for S&R": "MegapixelCalculatorNode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "1.5",
+        "1:1 (Perfect Square)",
+        "64",
+        false,
+        "1:1"
+      ]
+    },
+    {
+      "id": 33,
+      "type": "NunchakuUssoewwinSDXLLoraStackV3",
+      "pos": [
+        205.26764335036034,
+        412.43289557891774
+      ],
+      "size": [
+        520.3125,
+        504.65625
+      ],
+      "flags": {},
+      "order": 16,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 82
+        },
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 99
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            97
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            68,
+            69
+          ]
+        }
+      ],
+      "properties": {
+        "visibleLoraCount": 3,
+        "aux_id": "ussoewwin/ComfyUI-nunchaku-unofficial-z-image-turbo",
+        "ver": "504cf7e5a552f9e5eba66fd481d732dd09895096",
+        "Node name for S&R": "NunchakuUssoewwinSDXLLoraStackV3",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "3",
+        3,
+        true,
+        false,
+        true,
+        "Art\\[XL]Felt_Craft.safetensors",
+        true,
+        true,
+        "Quality\\pcm_sdxl_normalcfg_16step_converted.safetensors",
+        1,
+        true,
+        "None",
+        1
+      ]
+    },
+    {
+      "id": 30,
+      "type": "EmptySD3LatentImage",
+      "pos": [
+        839.2488236900717,
+        428.02679014904413
+      ],
+      "size": [
+        270,
+        240
+      ],
+      "flags": {},
+      "order": 11,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "width",
+          "type": "INT",
+          "widget": {
+            "name": "width"
+          },
+          "link": 57
+        },
+        {
+          "name": "height",
+          "type": "INT",
+          "widget": {
+            "name": "height"
+          },
+          "link": 59
+        }
+      ],
+      "outputs": [
+        {
+          "name": "LATENT",
+          "type": "LATENT",
+          "links": [
+            56
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "EmptySD3LatentImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        1024,
+        1024,
+        1
+      ]
+    },
+    {
+      "id": 17,
+      "type": "ControlNetApplyAdvanced",
+      "pos": [
+        73.66668213040865,
+        1611.0014053053076
+      ],
+      "size": [
+        270,
+        336
+      ],
+      "flags": {},
+      "order": 22,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 27
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 28
+        },
+        {
+          "name": "control_net",
+          "type": "CONTROL_NET",
+          "link": 33
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 63
+        },
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": 32
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            48
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            49
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "ControlNetApplyAdvanced",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "id": 27,
+      "type": "ControlNetApplyAdvanced",
+      "pos": [
+        1702.2388743926383,
+        1595.1183287031008
+      ],
+      "size": [
+        270,
+        336
+      ],
+      "flags": {},
+      "order": 23,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 48
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 49
+        },
+        {
+          "name": "control_net",
+          "type": "CONTROL_NET",
+          "link": 52
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 54
+        },
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            100
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            101
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "ControlNetApplyAdvanced",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        1,
+        0,
+        1
+      ]
+    },
+    {
+      "id": 32,
+      "type": "AIO_Preprocessor",
+      "pos": [
+        -410.62969071384794,
+        1573.6684912275182
+      ],
+      "size": [
+        380.90625,
+        206
+      ],
+      "flags": {},
+      "order": 10,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 62
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            63,
+            70
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui_controlnet_aux",
+        "ver": "136f125c89aed92ced1b6fbb491e13719b72fcc0",
+        "Node name for S&R": "AIO_Preprocessor",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "CannyEdgePreprocessor",
+        768
+      ]
+    },
+    {
+      "id": 34,
+      "type": "PreviewImage",
+      "pos": [
+        414.8747540437421,
+        1619.4586430135532
+      ],
+      "size": [
+        225,
+        385
+      ],
+      "flags": {},
+      "order": 15,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 70
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "PreviewImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 35,
+      "type": "ModelPatchTorchSettings",
+      "pos": [
+        -233.6537530697472,
+        358.52540375419665
+      ],
+      "size": [
+        311,
+        172
+      ],
+      "flags": {},
+      "order": 12,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 98
+        }
+      ],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            82
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui-kjnodes",
+        "ver": "1.2.2",
+        "Node name for S&R": "ModelPatchTorchSettings",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        true
+      ]
+    },
+    {
+      "id": 2,
+      "type": "CLIPTextEncode",
+      "pos": [
+        1155.5882743275492,
+        805.7562014063702
+      ],
+      "size": [
+        545.34375,
+        275.546875
+      ],
+      "flags": {},
+      "order": 21,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "clip",
+          "type": "CLIP",
+          "link": 69
+        }
+      ],
+      "outputs": [
+        {
+          "name": "CONDITIONING",
+          "type": "CONDITIONING",
+          "links": [
+            28,
+            92
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "CLIPTextEncode",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "wakame, embedding:SDXL1.0\\negativeXL, embedding:SDXL1.0\\negativeXL D, (bad anatomy:1.3), (low quality:1.3), (normal quality:1.3), low resolution, lowres,(inaccurate limb:1.3), (BadDream, UnrealisticDream), (grayscale), (paintings, sketches, monochrome, flat color:1.2), (((socks, stockings, shoes:1.3))),\nBREAK\n(missing leg, extra arm, extra leg:1.1), (missing hands, liquid fingers, split hands, missing fingers:1.1), interlocked fingers, bad arms, long body, long neck, extra digit, fewer digits, disconnected limbs, disfigured, disgusting, extra limb, extra limbs, floating limbs, missing limb, poorly drawn face, poorly drawn hands,\nBREAK\npixelated, jpeg artifacts, (text), (logo), 2d, 3d, b&w, bad art, blur, blurry, close up, deformed, illustration, kitsch, low-res, mangled, mutated, mutation, mutilated, noisy, old, out of focus, over saturation, oversaturated, poorly drawn, render, ugly, weird colors, badicturep, acnes, skin blemishes, tattoo,\nBREAK\n(spot:1.2), (mole:1.2), (freckles), (abs), "
+      ]
+    },
+    {
+      "id": 39,
+      "type": "NunchakuUltimateSDUpscale",
+      "pos": [
+        3330.2965783759814,
+        394.9494308092499
+      ],
+      "size": [
+        304.890625,
+        838.65625
+      ],
+      "flags": {},
+      "order": 28,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 119
+        },
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 95
+        },
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 91
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 92
+        },
+        {
+          "name": "vae",
+          "type": "VAE",
+          "link": 93
+        },
+        {
+          "name": "upscale_model",
+          "type": "UPSCALE_MODEL",
+          "link": 96
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            94
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "ussoewwin/ComfyUI-nunchaku-unofficial-loader",
+        "ver": "c104d8845dafd73904f14bc9c356a29da166f799",
+        "Node name for S&R": "NunchakuUltimateSDUpscale",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        2,
+        932361058750862,
+        "randomize",
+        20,
+        7,
+        "euler",
+        "simple",
+        0.2,
+        "Linear",
+        512,
+        512,
+        8,
+        32,
+        "None",
+        1,
+        64,
+        8,
+        16,
+        true,
+        false
+      ]
+    },
+    {
+      "id": 40,
+      "type": "NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced",
+      "pos": [
+        1272.6867411263647,
+        211.86615043598158
+      ],
+      "size": [
+        441.890625,
+        204
+      ],
+      "flags": {},
+      "order": 19,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "link": 97
+        }
+      ],
+      "outputs": [
+        {
+          "name": "model",
+          "type": "MODEL",
+          "links": [
+            86,
+            95
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "ussoewwin/ComfyUI-nunchaku-unofficial-loader",
+        "ver": "c104d8845dafd73904f14bc9c356a29da166f799",
+        "Node name for S&R": "NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced",
+        "cnr_id": "ComfyUI-QwenImageLoraLoader",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        0.2,
+        0,
+        1
+      ]
+    },
+    {
+      "id": 41,
+      "type": "SaveImage",
+      "pos": [
+        3693.9072579078315,
+        397.7385346781179
+      ],
+      "size": [
+        270,
+        432
+      ],
+      "flags": {},
+      "order": 30,
+      "mode": 4,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 94
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.7.0",
+        "Node name for S&R": "SaveImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "ComfyUI"
+      ]
+    },
+    {
+      "id": 42,
+      "type": "UpscaleModelLoader",
+      "pos": [
+        2940.4559028453045,
+        501.1774610171355
+      ],
+      "size": [
+        329.9375,
+        169.90625
+      ],
+      "flags": {},
+      "order": 4,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "UPSCALE_MODEL",
+          "type": "UPSCALE_MODEL",
+          "links": [
+            96
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.7.0",
+        "Node name for S&R": "UpscaleModelLoader",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "RealESRGAN_x4plus.pth"
+      ]
+    },
+    {
+      "id": 43,
+      "type": "NunchakuUssoewwinSDXLIntegratedLoader",
+      "pos": [
+        -795.9879077399077,
+        362.1659675428174
+      ],
+      "size": [
+        406.890625,
+        285.328125
+      ],
+      "flags": {},
+      "order": 5,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "MODEL",
+          "type": "MODEL",
+          "links": [
+            98
+          ]
+        },
+        {
+          "name": "CLIP",
+          "type": "CLIP",
+          "links": [
+            99
+          ]
+        }
+      ],
+      "properties": {
+        "aux_id": "ussoewwin/ComfyUI-nunchaku-unofficial-loader",
+        "ver": "5d6daa846f07da3de9bb8c2995f7523f390145a8",
+        "Node name for S&R": "NunchakuUssoewwinSDXLIntegratedLoader",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "r32_svdq_fp4_bluePencilXL_v031_integrated.safetensors",
+        "nunchaku-fp16",
+        "default",
+        true
+      ]
+    },
+    {
+      "id": 44,
+      "type": "ControlNetApplyAdvanced",
+      "pos": [
+        3356.6494541616566,
+        1645.5307542269768
+      ],
+      "size": [
+        270,
+        306
+      ],
+      "flags": {},
+      "order": 24,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "link": 100
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "link": 101
+        },
+        {
+          "name": "control_net",
+          "type": "CONTROL_NET",
+          "link": 109
+        },
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 104
+        },
+        {
+          "name": "vae",
+          "shape": 7,
+          "type": "VAE",
+          "link": null
+        }
+      ],
+      "outputs": [
+        {
+          "name": "positive",
+          "type": "CONDITIONING",
+          "links": [
+            102
+          ]
+        },
+        {
+          "name": "negative",
+          "type": "CONDITIONING",
+          "links": [
+            103
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.6.0",
+        "Node name for S&R": "ControlNetApplyAdvanced",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        0.9,
+        0,
+        1
+      ]
+    },
+    {
+      "id": 45,
+      "type": "AIO_Preprocessor",
+      "pos": [
+        2899.937763561952,
+        1812.2926659438058
+      ],
+      "size": [
+        323.375,
+        188.28125
+      ],
+      "flags": {},
+      "order": 13,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "image",
+          "type": "IMAGE",
+          "link": 106
+        }
+      ],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            104,
+            107
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfyui_controlnet_aux",
+        "ver": "136f125c89aed92ced1b6fbb491e13719b72fcc0",
+        "Node name for S&R": "AIO_Preprocessor",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "DWPreprocessor",
+        768
+      ]
+    },
+    {
+      "id": 46,
+      "type": "LoadImage",
+      "pos": [
+        2500.155803985375,
+        1499.1127301750703
+      ],
+      "size": [
+        280,
+        466
+      ],
+      "flags": {},
+      "order": 6,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            106
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.7.0",
+        "Node name for S&R": "LoadImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "ComfyUI_05151_.png",
+        "image"
+      ]
+    },
+    {
+      "id": 47,
+      "type": "PreviewImage",
+      "pos": [
+        3682.0504401247103,
+        1629.0054383323247
+      ],
+      "size": [
+        225,
+        351
+      ],
+      "flags": {},
+      "order": 17,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "images",
+          "type": "IMAGE",
+          "link": 107
+        }
+      ],
+      "outputs": [],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.7.0",
+        "Node name for S&R": "PreviewImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": []
+    },
+    {
+      "id": 49,
+      "type": "ControlNetLoader",
+      "pos": [
+        2892.489172608237,
+        1568.0005738471682
+      ],
+      "size": [
+        425.390625,
+        146.4375
+      ],
+      "flags": {},
+      "order": 7,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "CONTROL_NET",
+          "type": "CONTROL_NET",
+          "links": [
+            109
+          ]
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.7.0",
+        "Node name for S&R": "ControlNetLoader",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "controlnet-union-pro-max-sdxl-1.0.safetensors"
+      ]
+    },
+    {
+      "id": 50,
+      "type": "FastGroupsBypasserV2",
+      "pos": [
+        -663.4153948615507,
+        782.4812422201189
+      ],
+      "size": [
+        287.9,
+        178
+      ],
+      "flags": {},
+      "order": 8,
+      "mode": 0,
+      "inputs": [],
+      "outputs": [],
+      "properties": {
+        "matchColors": "red",
+        "matchTitle": "",
+        "showNav": true,
+        "showAllGraphs": true,
+        "sort": "position",
+        "customSortAlphabet": "",
+        "toggleRestriction": "default",
+        "effectMode": "Bypass",
+        "cnr_id": "comfyui-nunchakufluxlorastacker",
+        "ver": "1.24.0",
+        "Node name for S&R": "FastGroupsBypasserV2",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "color": "#322",
+      "bgcolor": "#533"
+    },
+    {
+      "id": 51,
+      "type": "LoadImage",
+      "pos": [
+        903.5546237891467,
+        1578.1815377990515
+      ],
+      "size": [
+        280,
+        436
+      ],
+      "flags": {},
+      "order": 9,
+      "mode": 4,
+      "inputs": [],
+      "outputs": [
+        {
+          "name": "IMAGE",
+          "type": "IMAGE",
+          "links": [
+            110
+          ]
+        },
+        {
+          "name": "MASK",
+          "type": "MASK",
+          "links": null
+        }
+      ],
+      "properties": {
+        "cnr_id": "comfy-core",
+        "ver": "0.7.0",
+        "Node name for S&R": "LoadImage",
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {},
+          "version": "7.5.2"
+        }
+      },
+      "widgets_values": [
+        "00032-3145985346.png",
+        "image"
+      ]
+    },
+    {
+      "id": 52,
+      "type": "DisTorchPurgeVRAMV2",
+      "pos": [
+        2178.184073217902,
+        658.5683414494835
+      ],
+      "size": [
+        304,
+        218
+      ],
+      "flags": {},
+      "order": 27,
+      "mode": 0,
+      "inputs": [
+        {
+          "name": "anything",
+          "type": "*",
+          "link": 114
+        }
+      ],
+      "outputs": [
+        {
+          "name": "any",
+          "type": "*",
+          "links": [
+            123
+          ]
+        }
+      ],
+      "properties": {
+        "ue_properties": {
+          "widget_ue_connectable": {},
+          "input_ue_unconnectable": {}
+        },
+        "cnr_id": "ComfyUI-DistorchMemoryManager",
+        "ver": "8439cdad7440b49331941e42fe2a46562ef8afd9",
+        "Node name for S&R": "DisTorchPurgeVRAMV2"
+      },
+      "widgets_values": [
+        true,
+        true,
+        false,
+        false,
+        true
+      ]
+    }
+  ],
+  "links": [
+    [
+      6,
+      7,
+      0,
+      5,
+      1,
+      "VAE"
+    ],
+    [
+      27,
+      3,
+      0,
+      17,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      28,
+      2,
+      0,
+      17,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      32,
+      7,
+      0,
+      17,
+      4,
+      "VAE"
+    ],
+    [
+      33,
+      19,
+      0,
+      17,
+      2,
+      "CONTROL_NET"
+    ],
+    [
+      48,
+      17,
+      0,
+      27,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      49,
+      17,
+      1,
+      27,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      52,
+      19,
+      0,
+      27,
+      2,
+      "CONTROL_NET"
+    ],
+    [
+      54,
+      28,
+      0,
+      27,
+      3,
+      "IMAGE"
+    ],
+    [
+      55,
+      28,
+      0,
+      29,
+      0,
+      "IMAGE"
+    ],
+    [
+      56,
+      30,
+      0,
+      4,
+      3,
+      "LATENT"
+    ],
+    [
+      57,
+      31,
+      0,
+      30,
+      0,
+      "INT"
+    ],
+    [
+      59,
+      31,
+      1,
+      30,
+      1,
+      "INT"
+    ],
+    [
+      62,
+      18,
+      0,
+      32,
+      0,
+      "IMAGE"
+    ],
+    [
+      63,
+      32,
+      0,
+      17,
+      3,
+      "IMAGE"
+    ],
+    [
+      68,
+      33,
+      1,
+      3,
+      0,
+      "CLIP"
+    ],
+    [
+      69,
+      33,
+      1,
+      2,
+      0,
+      "CLIP"
+    ],
+    [
+      70,
+      32,
+      0,
+      34,
+      0,
+      "IMAGE"
+    ],
+    [
+      82,
+      35,
+      0,
+      33,
+      0,
+      "MODEL"
+    ],
+    [
+      86,
+      40,
+      0,
+      4,
+      0,
+      "MODEL"
+    ],
+    [
+      91,
+      3,
+      0,
+      39,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      92,
+      2,
+      0,
+      39,
+      3,
+      "CONDITIONING"
+    ],
+    [
+      93,
+      7,
+      0,
+      39,
+      4,
+      "VAE"
+    ],
+    [
+      94,
+      39,
+      0,
+      41,
+      0,
+      "IMAGE"
+    ],
+    [
+      95,
+      40,
+      0,
+      39,
+      1,
+      "MODEL"
+    ],
+    [
+      96,
+      42,
+      0,
+      39,
+      5,
+      "UPSCALE_MODEL"
+    ],
+    [
+      97,
+      33,
+      0,
+      40,
+      0,
+      "MODEL"
+    ],
+    [
+      98,
+      43,
+      0,
+      35,
+      0,
+      "MODEL"
+    ],
+    [
+      99,
+      43,
+      1,
+      33,
+      1,
+      "CLIP"
+    ],
+    [
+      100,
+      27,
+      0,
+      44,
+      0,
+      "CONDITIONING"
+    ],
+    [
+      101,
+      27,
+      1,
+      44,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      102,
+      44,
+      0,
+      4,
+      1,
+      "CONDITIONING"
+    ],
+    [
+      103,
+      44,
+      1,
+      4,
+      2,
+      "CONDITIONING"
+    ],
+    [
+      104,
+      45,
+      0,
+      44,
+      3,
+      "IMAGE"
+    ],
+    [
+      106,
+      46,
+      0,
+      45,
+      0,
+      "IMAGE"
+    ],
+    [
+      107,
+      45,
+      0,
+      47,
+      0,
+      "IMAGE"
+    ],
+    [
+      109,
+      49,
+      0,
+      44,
+      2,
+      "CONTROL_NET"
+    ],
+    [
+      110,
+      51,
+      0,
+      28,
+      0,
+      "IMAGE"
+    ],
+    [
+      113,
+      4,
+      0,
+      5,
+      0,
+      "LATENT"
+    ],
+    [
+      114,
+      5,
+      0,
+      52,
+      0,
+      "IMAGE"
+    ],
+    [
+      119,
+      5,
+      0,
+      39,
+      0,
+      "IMAGE"
+    ],
+    [
+      123,
+      52,
+      0,
+      6,
+      0,
+      "IMAGE"
+    ]
+  ],
+  "groups": [
+    {
+      "id": 1,
+      "title": "OpenPose",
+      "bounding": [
+        2439.8901682378064,
+        1384.1652830894761,
+        1551.3223288012305,
+        722.7844269779687
+      ],
+      "color": "#A88",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 2,
+      "title": "Upscale",
+      "bounding": [
+        2905.1667515208924,
+        245.51775231955384,
+        1095.8926476077982,
+        1006.1535443985481
+      ],
+      "color": "#A88",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 3,
+      "title": "Canny",
+      "bounding": [
+        -861.2156567506186,
+        1407.255564001292,
+        1596.04616427821,
+        658.3631820746816
+      ],
+      "color": "#A88",
+      "font_size": 24,
+      "flags": {}
+    },
+    {
+      "id": 4,
+      "title": "Depth",
+      "bounding": [
+        834.6384872667534,
+        1391.7457526657647,
+        1496.105120612131,
+        698.3881188172534
+      ],
+      "color": "#A88",
+      "font_size": 24,
+      "flags": {}
+    }
+  ],
+  "config": {},
+  "extra": {
+    "ds": {
+      "scale": 0.23579476910002348,
+      "offset": [
+        2014.8012345330415,
+        309.4180917743346
+      ]
+    },
+    "ue_links": [],
+    "links_added_by_ue": [],
+    "frontendVersion": "1.35.9",
+    "VHS_latentpreview": false,
+    "VHS_latentpreviewrate": 0,
+    "VHS_MetadataImage": true,
+    "VHS_KeepIntermediate": true
+  },
+  "version": 0.4
+}
