@@ -1,5 +1,5 @@
 """
-LoRA有無での速度比較
+Speed comparison with and without LoRA
 """
 
 import torch
@@ -14,7 +14,7 @@ def benchmark_with_without_lora():
     from nunchaku.models.unets.unet_sdxl import NunchakuSDXLUNet2DConditionModel, convert_sdxl_state_dict
 
     print("=" * 60)
-    print("Nunchaku SDXL: LoRA有無での速度比較")
+    print("Nunchaku SDXL: Speed comparison with and without LoRA")
     print("=" * 60)
 
     gpu_name = torch.cuda.get_device_name(0)
@@ -45,7 +45,7 @@ def benchmark_with_without_lora():
     print("Model loaded.")
     print()
 
-    # 入力
+    # Input
     batch_size = 1
     latent_size = 128
     sample = torch.randn(batch_size, 4, latent_size, latent_size, device="cuda", dtype=torch.bfloat16)
@@ -62,7 +62,7 @@ def benchmark_with_without_lora():
             out = unet(sample, timestep, encoder_hidden_states, added_cond_kwargs=added_cond_kwargs)
     torch.cuda.synchronize()
 
-    # ベンチマーク (LoRAなし = 純粋なUNet)
+    # Benchmark (no LoRA = pure UNet)
     iters = 20
     print("[1] Pure UNet (no LoRA runtime)")
     start = time.time()
@@ -74,21 +74,21 @@ def benchmark_with_without_lora():
     print(f"    Time: {time_no_lora:.2f} ms/iter")
     print(f"    it/s: {1000 / time_no_lora:.2f}")
 
-    # LoRAシミュレーション: 追加の2xGEMMをシミュレート
-    # 実際のLoRAローダーの挙動を模倣
+    # LoRA simulation: simulate additional 2xGEMM
+    # Mimic actual LoRA loader behavior
     print()
     print("[2] Simulated LoRA overhead (2x GEMM per attention layer)")
     
-    # SDXLには約70個のattentionレイヤーがある
-    # 各レイヤーで (N, in) @ (in, rank) @ (rank, out) の2 GEMMが追加される
-    # 典型的なパラメータ: in=1024, out=1024, rank=64(LoRA), N=128*128=16384
+    # SDXL has approximately 70 attention layers
+    # Each layer adds 2 GEMMs: (N, in) @ (in, rank) @ (rank, out)
+    # Typical parameters: in=1024, out=1024, rank=64(LoRA), N=128*128=16384
     num_attn_layers = 70
     lora_rank = 64
     in_features = 1024
     out_features = 1024
     seq_len = 128 * 128  # 1024x1024 latent
 
-    # ダミーLoRA行列
+    # Dummy LoRA matrices
     down_t = torch.randn(in_features, lora_rank, device="cuda", dtype=torch.bfloat16)
     up_t = torch.randn(lora_rank, out_features, device="cuda", dtype=torch.bfloat16)
     x_lora = torch.randn(seq_len, in_features, device="cuda", dtype=torch.bfloat16)
@@ -98,7 +98,7 @@ def benchmark_with_without_lora():
         add = (x_lora @ down_t) @ up_t
     torch.cuda.synchronize()
 
-    # ベンチマーク: 1ステップあたりの追加オーバーヘッド
+    # Benchmark: additional overhead per step
     start = time.time()
     for _ in range(iters):
         for _ in range(num_attn_layers):

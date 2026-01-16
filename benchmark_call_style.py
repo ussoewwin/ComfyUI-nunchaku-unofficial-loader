@@ -1,5 +1,5 @@
 """
-ComfyUIのローダーを使ってモデルをロードし、直接呼び出して測定
+Load model using ComfyUI loader and measure by direct calls
 """
 
 import torch
@@ -18,7 +18,7 @@ from safetensors import safe_open
 from nunchaku.models.unets.unet_sdxl import NunchakuSDXLUNet2DConditionModel, convert_sdxl_state_dict
 
 print("=" * 60)
-print("ComfyUIローダー経由 vs スタンドアロン比較")
+print("Via ComfyUI loader vs standalone comparison")
 print("=" * 60)
 
 gpu_name = torch.cuda.get_device_name(0)
@@ -26,7 +26,7 @@ print(f"GPU: {gpu_name}\n")
 
 model_path = Path(r"D:\USERFILES\ComfyUI\ComfyUI\models\unet\r128_svdq_fp4_bluePencilXL_v031_integrated.safetensors")
 
-# スタンドアロンと同じ方法でロード
+# Load using same method as standalone
 print("Loading model (standalone method)...")
 with safe_open(str(model_path), framework="pt") as f:
     metadata = f.metadata()
@@ -48,7 +48,7 @@ unet.load_state_dict(converted_sd, strict=False)
 unet.eval()
 print("Model loaded.\n")
 
-# テスト入力
+# Test input
 batch_size = 1
 latent_size = 128
 dtype = torch.bfloat16
@@ -68,8 +68,8 @@ with torch.no_grad():
         out = unet(sample, timestep, context, added_cond_kwargs=added_cond_kwargs)
         torch.cuda.synchronize()
 
-# [1] 位置引数で呼び出し
-print("\n[1] 位置引数で呼び出し:")
+# [1] Call with positional arguments
+print("\n[1] Call with positional arguments:")
 times = []
 with torch.no_grad():
     for _ in range(20):
@@ -80,8 +80,8 @@ with torch.no_grad():
         times.append((time.time() - start) * 1000)
 print(f"    Time: {sum(times)/len(times):.2f} ms/iter")
 
-# [2] キーワード引数で呼び出し（ComfyUIスタイル）
-print("\n[2] キーワード引数で呼び出し（ComfyUIスタイル）:")
+# [2] Call with keyword arguments (ComfyUI style)
+print("\n[2] Call with keyword arguments (ComfyUI style):")
 times = []
 with torch.no_grad():
     for _ in range(20):

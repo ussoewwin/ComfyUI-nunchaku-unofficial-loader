@@ -1,5 +1,5 @@
 """
-各イテレーション後にsynchronize()して正確な時間を測定
+Measure accurate time by calling synchronize() after each iteration
 """
 
 import torch
@@ -15,7 +15,7 @@ def benchmark_per_iter():
     from nunchaku.models.unets.unet_sdxl import NunchakuSDXLUNet2DConditionModel, convert_sdxl_state_dict
     
     print("=" * 60)
-    print("Nunchaku SDXL: 各イテレーション後にsynchronize()")
+    print("Nunchaku SDXL: synchronize() after each iteration")
     print("=" * 60)
 
     gpu_name = torch.cuda.get_device_name(0)
@@ -45,7 +45,7 @@ def benchmark_per_iter():
     unet.eval()
     print("Model loaded.\n")
 
-    # テスト入力
+    # Test input
     batch_size = 1
     latent_size = 128
     dtype = torch.bfloat16
@@ -58,15 +58,15 @@ def benchmark_per_iter():
         "time_ids": torch.tensor([[1024, 1024, 0, 0, 1024, 1024]], device="cuda", dtype=torch.float32),
     }
 
-    # Warmup (3回、各回後にsync)
+    # Warmup (3 iterations, sync after each)
     print("Warmup...")
     with torch.no_grad():
         for _ in range(3):
             out = unet(sample, timestep, context, added_cond_kwargs=added_cond_kwargs)
             torch.cuda.synchronize()
 
-    # [1] バッチ計測（最後にだけsync）- 元のベンチマーク方法
-    print("\n[1] バッチ計測（最後にだけsync）:")
+    # [1] Batch measurement (sync only at the end) - original benchmark method
+    print("\n[1] Batch measurement (sync only at the end):")
     iters = 20
     start = time.time()
     with torch.no_grad():
@@ -76,8 +76,8 @@ def benchmark_per_iter():
     time_batch = (time.time() - start) / iters * 1000
     print(f"    Time: {time_batch:.2f} ms/iter")
 
-    # [2] 各イテレーション計測（毎回sync）- 正確な計測
-    print("\n[2] 各イテレーション計測（毎回sync）:")
+    # [2] Per-iteration measurement (sync every time) - accurate measurement
+    print("\n[2] Per-iteration measurement (sync every time):")
     times = []
     with torch.no_grad():
         for _ in range(iters):
@@ -92,9 +92,9 @@ def benchmark_per_iter():
     print(f"    Max:  {max(times):.2f} ms")
 
     print("\n" + "=" * 60)
-    print(f"バッチ計測: {time_batch:.2f} ms")
-    print(f"個別計測:   {time_per_iter:.2f} ms")
-    print(f"差:         {time_per_iter - time_batch:.2f} ms ({(time_per_iter/time_batch - 1)*100:.1f}%)")
+    print(f"Batch measurement: {time_batch:.2f} ms")
+    print(f"Per-iteration:     {time_per_iter:.2f} ms")
+    print(f"Difference:        {time_per_iter - time_batch:.2f} ms ({(time_per_iter/time_batch - 1)*100:.1f}%)")
     print("=" * 60)
 
 
