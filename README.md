@@ -39,7 +39,7 @@ Restart ComfyUI to load the nodes.
 
 ## Available Quantized Models
 
-If you are using Nunchaku with CUDA 13.0 (cu130), use these quantized models:
+Available quantized models for Nunchaku:
 - **[Nunchaku-R128-SDXL-Series](https://huggingface.co/ussoewwin/Nunchaku-R128-SDXL-Series)** - A collection of high-fidelity quantized SDXL models optimized using Nunchaku (SVDQ W4A4) engine with Rank 128 (r128) quantization.
 
 ## Sample Workflows
