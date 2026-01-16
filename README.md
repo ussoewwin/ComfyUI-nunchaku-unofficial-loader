@@ -3,17 +3,11 @@
 <img src="https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/icon.png" width="128">
 </p>
 
-<div align="center">
+## ⚠️ WARNING
 
-<h2>⚠️ <span style="font-size: 1.5em; color: #ff6b6b;">WARNING</span></h2>
-
-<p style="font-size: 1.2em; font-weight: bold; color: #d63031;">
-This is an <strong>UNOFFICIAL</strong> test version of the node.<br>
-It may not work correctly depending on your environment.<br>
-<strong>(Unfortunately, no speed advantage at present)</strong>
-</p>
-
-</div>
+This is an **UNOFFICIAL** test version of the node.  
+It may not work correctly depending on your environment.  
+**(Unfortunately, no speed advantage at present)**
 
 These are Nunchaku unofficial loaders for using SDXL models quantized with SVDQ (SVDQuant) method, based on [ComfyUI-nunchaku](https://github.com/nunchaku-ai/ComfyUI-nunchaku) with custom additions.
 
@@ -260,7 +254,7 @@ A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node pr
 
 ### Model Distribution & Usage
 
-* This repository **does NOT distribute any model checkpoints**, weights, or training data.
+* **This repository does NOT distribute any model checkpoints, weights, or training data.**
 * All model files (including SDXL checkpoints, quantized UNet files, CLIP, VAE, LoRA, and ControlNet models) **must be obtained separately by the user**.
 * Users are solely responsible for ensuring that **all downloaded or generated model files comply with their respective licenses** (e.g., CreativeML Open RAIL, Apache-2.0, custom research licenses, etc.).
 * The author does **not grant any rights** to redistribute, modify, or use third-party models beyond what is permitted by their original licenses.
@@ -284,6 +278,7 @@ This project is licensed under the **Apache License, Version 2.0**.
 
 ### Key Points
 
+* Copyright © 2024–2025 ussoewwin
 * You are free to **use, modify, and distribute** this software, including for commercial purposes.
 * You **must retain**:
   * The original copyright notice
