@@ -18,6 +18,22 @@ It may not work correctly depending on your environment.<br>
 
 These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom additions.
 
+## Installation
+
+### Quick Install
+
+Clone this repository into your ComfyUI `custom_nodes` directory:
+
+```bash
+# Windows
+git clone https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader "%USERPROFILE%\ComfyUI\custom_nodes\ComfyUI-nunchaku-unofficial-loader"
+
+# Linux/Mac
+git clone https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader ~/ComfyUI/custom_nodes/ComfyUI-nunchaku-unofficial-loader
+```
+
+Restart ComfyUI to load the nodes.
+
 ## Requirements
 
 **Nunchaku library**: You **MUST** have the Nunchaku library version **v1.1.0 or later** installed. This is a hard requirement - other versions will not work.
