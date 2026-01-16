@@ -11,7 +11,7 @@
 <p style="font-size: 1.2em; font-weight: bold; color: #d63031;">
 This is an <strong>UNOFFICIAL</strong> test version of the node.<br>
 It may not work correctly depending on your environment.<br>
-(Unfortunately, no speed advantage at present)
+<strong>(Unfortunately, no speed advantage at present)</strong>
 </p>
 
 </div>
@@ -59,7 +59,7 @@ To use these workflows:
 
 <img src="png/integrated.png" alt="Nunchaku-ussoewwin SDXL Integrated Loader Node" width="400">
 
-A ComfyUI node for loading "unified" Nunchaku SDXL models that contain both UNet and CLIP in a single checkpoint file. This node behaves like a standard CheckpointLoader but uses Nunchaku for the UNet portion. (Unfortunately, no speed advantage at present)
+A ComfyUI node for loading "unified" Nunchaku SDXL models that contain both UNet and CLIP in a single checkpoint file. This node behaves like a standard CheckpointLoader but uses Nunchaku for the UNet portion. <strong>(Unfortunately, no speed advantage at present)</strong>
 
 #### Features
 
