@@ -1,0 +1,29 @@
+name: Publish to ComfyUI Registry
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Comfy CLI
+        run: |
+          pip install --upgrade pip
+          pip install comfy-cli
+
+      - name: Publish to ComfyUI Registry
+        env:
+          REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+        run: |
+          comfy node publish
