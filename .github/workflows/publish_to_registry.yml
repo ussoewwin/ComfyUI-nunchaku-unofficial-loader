@@ -25,5 +25,7 @@ jobs:
       - name: Publish to ComfyUI Registry
         env:
           REGISTRY_ACCESS_TOKEN: ${{ secrets.REGISTRY_ACCESS_TOKEN }}
+          COMFY_TRACKING: "false"
         run: |
-          comfy node publish
+          echo "N" | comfy node publish || true
+          comfy node publish --token $REGISTRY_ACCESS_TOKEN
