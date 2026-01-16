@@ -153,6 +153,14 @@ A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node pr
 
 ## Changelog
 
+### Version 2.6.2
+
+- Fixed NunchakuUltimateSDUpscale node registration issue with Nunchaku 1.2.0
+  - Improved error handling in INPUT_TYPES to prevent node registration failures
+  - Node now appears in UI even if ComfyUI_UltimateSDUpscale import fails
+  - See [Issue #2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/issues/2) for details
+- See [Release Notes v2.6.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.6.2) for details
+
 ### Version 2.6.1
 
 - Optimized LoRA processing performance for SDXL models
