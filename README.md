@@ -1,5 +1,5 @@
 <div align="center" id="nunchaku_logo">
-  <img src="https://huggingface.co/datasets/nunchaku-tech/cdn/resolve/main/logo/v2/nunchaku-compact-transparent.png" alt="logo" width="220"></img>
+  <img src="https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/icon.png" alt="logo" width="220"></img>
 </div>
 
 <div align="center">
