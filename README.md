@@ -1,4 +1,6 @@
-![ComfyUI-nunchaku-unofficial-loader](icon.png)
+<p align="center">
+  <img src="icon.png" alt="ComfyUI-nunchaku-unofficial-loader" width="128">
+</p>
 
 <div align="center">
 
