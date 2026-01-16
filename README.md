@@ -22,8 +22,6 @@ These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom add
 
 **Pre-built package**: If you are using Nunchaku with CUDA 13.0 (cu130), use the pre-built package available at [ussoewwin/nunchaku-build-on-cu130-windows](https://huggingface.co/ussoewwin/nunchaku-build-on-cu130-windows).
 
-**Building from source**: If you use a different environment, you need to build the Nunchaku library from source. The build instructions are not provided in this repository; please refer to the official Nunchaku repository for build documentation.
-
 ## Available Quantized Models
 
 If you are using Nunchaku with CUDA 13.0 (cu130), use these quantized models:
