@@ -29,6 +29,17 @@ These are Nunchaku unofficial loaders, based on ComfyUI-nunchaku with custom add
 If you are using Nunchaku with CUDA 13.0 (cu130), use these quantized models:
 - **[Nunchaku-R128-SDXL-Series](https://huggingface.co/ussoewwin/Nunchaku-R128-SDXL-Series)** - A collection of high-fidelity quantized SDXL models optimized using Nunchaku (SVDQ W4A4) engine with Rank 128 (r128) quantization.
 
+## Sample Workflows
+
+Sample ComfyUI workflows are available in the `sample` directory. These workflows demonstrate how to use the Nunchaku SDXL loaders and can be imported directly into ComfyUI.
+
+- **[sdxltest.json](sample/sdxltest.json)** - Sample workflow demonstrating Nunchaku SDXL model loading and generation. This workflow showcases the basic usage of Nunchaku SDXL Integrated Loader with a complete generation pipeline.
+
+To use these workflows:
+1. Download the JSON file from the `sample` directory
+2. Import it into ComfyUI using the "Load" button
+3. Ensure you have the required models installed (see Requirements section)
+
 ## Nodes
 
 ### Nunchaku-ussoewwin SDXL Integrated Loader
