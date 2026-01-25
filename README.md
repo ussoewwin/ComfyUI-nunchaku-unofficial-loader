@@ -148,6 +148,15 @@ A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node pr
 
 ## Changelog
 
+### Version 2.6.6
+- **Fixed**: Fixed `AttributeError: 'Logger' object has no attribute 'mgpu_mm_log'` error that was causing prompt execution to crash in ComfyUI. The error occurred when the system attempted to log memory management operations using a non-existent custom logging method (`logger.mgpu_mm_log()`).
+- **Solution**: Replaced all instances of `logger.mgpu_mm_log()` with `logger.info()` across 3 files:
+  - `model_management_mgpu.py` (7 instances)
+  - `device_utils.py` (~15 instances)
+  - `wrappers.py` (~7 instances)
+- **Impact**: Prompt execution now works correctly without crashes. Memory management, monitoring, and cleanup operations function properly with standard Python logging methods. All logging functionality is preserved while using standard logging infrastructure.
+- **Technical Details**: See [MGPU_MM_LOG_ATTRIBUTE_ERROR_FIX.md](https://github.com/ussoewwin/ComfyUI-QwenImageLoraLoader/blob/main/md/MGPU_MM_LOG_ATTRIBUTE_ERROR_FIX.md) for complete explanation
+
 ### Version 2.6.3
 
 - Added **Checkpoint Loader (SDXL)** node
