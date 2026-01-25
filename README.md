@@ -13,7 +13,59 @@ It may not work correctly depending on your environment.
 
 </div>
 
-These are Nunchaku unofficial loaders for using SDXL models quantized with SVDQ (SVDQuant) method, based on [ComfyUI-nunchaku](https://github.com/nunchaku-ai/ComfyUI-nunchaku) with custom additions.
+## ⚠️ IMPORTANT NOTICE – SDXL SVDQ DEPRECATION
+
+After extensive long-term testing, repeated real-world benchmarking, and significant development effort devoted specifically to improving generation speed and VRAM (VRSAM) efficiency, active development of SDXL SVDQ (4-bit) support in this repository has been discontinued.
+
+Throughout this process, multiple optimization strategies were evaluated, including kernel behavior analysis, runtime integration adjustments, and execution-path tuning. However, despite these efforts, the fundamental limitations of SDXL SVDQ remained unchanged.
+
+For SDXL models, SVDQ / FP4 quantization does **NOT** provide practical advantages over standard fp16 execution:
+
+- No consistent generation speed improvement, even after extensive tuning
+- No meaningful VRAM (VRSAM) reduction in real-world usage scenarios
+- Additional runtime overhead caused by fp16 conversion, kernel dispatch, and integration costs
+
+While a reduction in model file size was achieved, this factor alone is insufficient to justify continued SDXL SVDQ support, given the lack of runtime and memory efficiency benefits.
+
+As a result:
+
+- SDXL SVDQ models (e.g. Nunchaku-R128-SDXL-Series) are being deprecated
+- Related Hugging Face repositories will be removed within approximately 30 days
+- SDXL SVDQ should be considered experimental / archival only
+- This repository will no longer be updated with new SDXL SVDQ models.
+
+### Future Direction: fp8e4m3
+
+Future SDXL-related development efforts are shifting toward fp8e4m3-based compression and formats.
+
+This decision is based on extensive comparative testing, which demonstrated that fp8e4m3 provides a substantially better balance between performance, memory usage, and image quality:
+
+- Fully compatible with standard ComfyUI loaders
+- Image quality effectively equivalent to fp16
+- No generation speed penalty
+- No increase in VRAM usage
+- Model size reduction comparable to 4-bit SVDQ, without its runtime drawbacks
+
+fp8e4m3-based SDXL models, compression scripts, and related technical documentation will continue to be published separately.
+
+### Status of This Repository
+
+This repository remains available strictly for:
+
+- Reference and research purposes
+- Advanced experimentation
+- Studying Nunchaku integration details, including:
+  - forward overrides
+  - LoRA mapping behavior
+  - ControlNet support
+  - First Block Cache
+  - SDXL-specific edge cases and limitations
+
+No guarantees are provided regarding future SDXL SVDQ functionality. **Use at your own risk.**
+
+---
+
+These are Nunchaku unofficial loaders quantized with SVDQ (SVDQuant) method, based on [ComfyUI-nunchaku](https://github.com/nunchaku-ai/ComfyUI-nunchaku) with custom additions.
 
 ## Installation
 
