@@ -148,6 +148,13 @@ A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node pr
 
 ## Changelog
 
+### Version 2.6.3
+
+- Added **Checkpoint Loader (SDXL)** node
+  - Loads MODEL and CLIP from standard SDXL checkpoints with optional device selection and FP8 precision support
+- Nunchaku SDXL SVDQ (4-bit) development discontinued; repository status updated (see IMPORTANT NOTICE at top)
+- See [Release Notes v2.6.3](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.6.3) for details
+
 ### Version 2.6.2
 
 - Fixed NunchakuUltimateSDUpscale node registration issue with Nunchaku 1.2.0
