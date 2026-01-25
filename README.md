@@ -91,6 +91,25 @@ Restart ComfyUI to load the nodes.
 
 ## Nodes
 
+### Checkpoint Loader (SDXL)
+
+<img src="png/fp8e4m3.png" alt="Checkpoint Loader (SDXL) Node" width="400">
+
+A ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, with optional device selection and FP8 precision support. Use it like the standard Load Checkpoint node; it outputs MODEL and CLIP only (no VAE).
+
+#### Features
+
+- **Checkpoint Loading**: Loads both UNet (MODEL) and CLIP from a single SDXL checkpoint file (same as standard Load Checkpoint)
+- **Device Selection**: Optional device parameter to choose GPU (e.g. `cuda:0`, `cuda:1`) or CPU for model loading
+- **FP8 Precision**: Supports `default`, `fp8_e4m3fn`, `fp8_e4m3fn_fast`, and `fp8_e5m2` weight dtypes for memory-efficient inference
+- **Standard ComfyUI Integration**: Uses `load_checkpoint_guess_config`; compatible with standard ComfyUI workflows
+
+#### Usage Notes
+
+- **Inputs**: `ckpt_name` (checkpoint file), `weight_dtype` (precision), and optionally `device`
+- **Outputs**: MODEL and CLIP only; use a separate VAE loader if needed
+- **Category**: Loaders (`loaders`)
+
 ### Nunchaku Ultimate SD Upscale
 
 <img src="png/upscale.png" alt="Nunchaku Ultimate SD Upscale Node" width="400">
