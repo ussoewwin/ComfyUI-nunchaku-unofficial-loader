@@ -29,8 +29,8 @@ While a reduction in model file size was achieved, this factor alone is insuffic
 
 As a result:
 
-- SDXL SVDQ models (e.g. Nunchaku-R128-SDXL-Series) are being deprecated
-- Related Hugging Face repositories will be removed within approximately 30 days
+- SDXL SVDQ models (e.g. Nunchaku-R128-SDXL-Series) are deprecated
+- Related Hugging Face repositories have been removed
 - SDXL SVDQ should be considered experimental / archival only
 - This repository will no longer be updated with new SDXL SVDQ models.
 
