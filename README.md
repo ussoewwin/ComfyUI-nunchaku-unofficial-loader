@@ -46,7 +46,7 @@ This decision is based on extensive comparative testing, which demonstrated that
 - No increase in VRAM usage
 - Model size reduction comparable to 4-bit SVDQ, without its runtime drawbacks
 
-fp8e4m3-based SDXL models, compression scripts, and related technical documentation will continue to be published separately. The fp8e4m3 development is **[Hybrid-Sensitivity-Weighted-Quantization (HSWQ)](https://github.com/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization)**. HSWQ is a novel FP8 E4M3 quantization method that combines sensitivity analysis and importance-weighted histogram optimization, achieving superior quality compared to naive uniform quantization while maintaining standard loader compatibility.
+fp8e4m3-based SDXL models, compression scripts, and related technical documentation will continue to be published separately. The fp8e4m3 development is **[Hybrid-Sensitivity-Weighted-Quantization (HSWQ)](https://github.com/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization)**. HSWQ is a novel FP8 E4M3 quantization method that combines sensitivity analysis and importance-weighted histogram optimization, achieving superior quality compared to naive uniform quantization while maintaining standard loader compatibility. Quantized HSWQ SDXL models are published at **[Hugging Face: Hybrid-Sensitivity-Weighted-Quantization-SDXL-fp8e4m3](https://huggingface.co/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization-SDXL-fp8e4m3)**.
 
 ### Status of This Repository
 
