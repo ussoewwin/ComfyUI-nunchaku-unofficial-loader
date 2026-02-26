@@ -331,39 +331,9 @@ except InvalidVersion:
 
 NODE_CLASS_MAPPINGS = {}
 
-try:
-    from .nodes.models.zimage import NunchakuZImageDiTLoader
-
-    NODE_CLASS_MAPPINGS["NunchakuUssoewwinZImageDiTLoader"] = NunchakuZImageDiTLoader
-except (ImportError, ModuleNotFoundError) as e:
-    logger.exception(f"Node `NunchakuZImageDiTLoader` import failed: {e}")
-    # Try alternative import method using absolute path
-    try:
-        import importlib.util
-        from pathlib import Path
-
-        # Get the directory where __init__.py is located
-        current_dir = Path(__file__).parent.resolve()
-        zimage_path = current_dir / "nodes" / "models" / "zimage.py"
-
-        if not zimage_path.exists():
-            raise FileNotFoundError(f"zimage.py not found at {zimage_path}")
-
-        spec = importlib.util.spec_from_file_location(
-            "nodes.models.zimage",
-            str(zimage_path)
-        )
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Failed to create spec for {zimage_path}")
-
-        zimage_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(zimage_module)
-        NunchakuZImageDiTLoader = zimage_module.NunchakuZImageDiTLoader
-        NODE_CLASS_MAPPINGS["NunchakuUssoewwinZImageDiTLoader"] = NunchakuZImageDiTLoader
-        logger.info(f"Successfully loaded NunchakuZImageDiTLoader using alternative method from {zimage_path}")
-    except Exception as e2:
-        logger.exception(f"Alternative import method also failed: {e2}")
-
+# Checkpoint Loader (SDXL): NunchakuSDXLIntegratedLoader + NunchakuSDXLDiTLoaderDualCLIP
+# Nunchaku Ultimate SD Upscale
+# (Other Nunchaku SDXL nodes removed)
 try:
     from .nodes.models.sdxl import NunchakuSDXLDiTLoaderDualCLIP, NunchakuSDXLIntegratedLoader
 
@@ -399,21 +369,6 @@ except (ImportError, ModuleNotFoundError) as e:
         logger.info(f"Successfully loaded NunchakuSDXLDiTLoaderDualCLIP and NunchakuSDXLIntegratedLoader using alternative method from {sdxl_path}")
     except Exception as e2:
         logger.exception(f"Alternative import method also failed: {e2}")
-
-
-
-try:
-    from .nodes.lora.sdxl_v3 import GENERATED_NODES as SDXL_LORA_V3_NODES
-    NODE_CLASS_MAPPINGS.update(SDXL_LORA_V3_NODES)
-except (ImportError, ModuleNotFoundError) as e:
-    logger.exception(f"Node `SDXL LoRA V3` import failed: {e}")
-
-try:
-    from .nodes.FirstBlockCachePatchNode import NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced
-    NODE_CLASS_MAPPINGS["NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced"] = NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced
-except (ImportError, ModuleNotFoundError) as e:
-    logger.exception(f"Node `NunchakuUssoewwinApplyFirstBlockCachePatchAdvanced` import failed: {e}")
-
 
 try:
     from .nodes.nunchaku_usdu import (
