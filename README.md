@@ -148,6 +148,18 @@ A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node pr
 
 ## Changelog
 
+### Version 3.0.0
+
+- **Breaking**: Aligned with SDXL SVDQ deprecation (see IMPORTANT NOTICE at top). Node registration reduced to the following three only:
+  - **Nunchaku-ussoewwin SDXL Integrated Loader** (Checkpoint Loader style: single checkpoint)
+  - **Nunchaku-ussoewwin SDXL DiT Loader (DualCLIP)** (UNet + CLIP from separate files)
+  - **Nunchaku Ultimate SD Upscale**
+- **Removed** from registration (no longer appear in ComfyUI):
+  - Nunchaku-ussoewwin Z-Image-Turbo DiT Loader
+  - Nunchaku-ussoewwin SDXL LoRA Stack V3
+  - Nunchaku Apply First Block Cache Patch Advanced
+- Future SDXL workflows are intended to use fp8e4m3 with standard ComfyUI loaders where applicable.
+
 ### Version 2.6.6
 - **Fixed**: Fixed `AttributeError: 'Logger' object has no attribute 'mgpu_mm_log'` error that was causing prompt execution to crash. Replaced all instances of `logger.mgpu_mm_log()` with `logger.info()` in `model_management_mgpu.py`, `device_utils.py`, and `wrappers.py`.
 
