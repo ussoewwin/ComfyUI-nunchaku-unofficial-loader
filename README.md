@@ -1,6 +1,6 @@
 # ComfyUI-nunchaku-unofficial-loader
 <p align="center">
-
+<img src="https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/blob/main/icon.png?v=3.0.0" width="128">
 </p>
 
 <div align="center">
