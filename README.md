@@ -3,16 +3,6 @@
 <img src="https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/blob/main/icon.png?v=3.0.0" width="128">
 </p>
 
-<div align="center">
-
-## ⚠️ WARNING
-
-This is an **UNOFFICIAL** test version of this node.  
-It may not work correctly depending on your environment.  
-**(Unfortunately, no speed advantage at present)**
-
-</div>
-
 ## ⚠️ IMPORTANT NOTICE – SDXL SVDQ DEPRECATION
 
 After extensive long-term testing, repeated real-world benchmarking, and significant development effort devoted specifically to improving generation speed and VRAM (VRSAM) efficiency, active development of SDXL SVDQ (4-bit) support in this repository has been discontinued.
