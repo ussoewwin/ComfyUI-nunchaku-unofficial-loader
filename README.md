@@ -6,14 +6,14 @@
 
 ## ⚠️ IMPORTANT NOTICE – SDXL SVDQ DEPRECATION
 
-After extensive long-term testing, repeated real-world benchmarking, and significant development effort devoted specifically to improving generation speed and VRAM (VRSAM) efficiency, active development of SDXL SVDQ (4-bit) support in this repository has been discontinued.
+After extensive long-term testing, repeated real-world benchmarking, and significant development effort devoted specifically to improving generation speed and VRAM efficiency, active development of SDXL SVDQ (4-bit) support in this repository has been discontinued.
 
 Throughout this process, multiple optimization strategies were evaluated, including kernel behavior analysis, runtime integration adjustments, and execution-path tuning. However, despite these efforts, the fundamental limitations of SDXL SVDQ remained unchanged.
 
 For SDXL models, SVDQ / FP4 quantization does **NOT** provide practical advantages over standard fp16 execution:
 
 - No consistent generation speed improvement, even after extensive tuning
-- No meaningful VRAM (VRSAM) reduction in real-world usage scenarios
+- No meaningful VRAM reduction in real-world usage scenarios
 - Additional runtime overhead caused by fp16 conversion, kernel dispatch, and integration costs
 
 While a reduction in model file size was achieved, this factor alone is insufficient to justify continued SDXL SVDQ support, given the lack of runtime and memory efficiency benefits.
