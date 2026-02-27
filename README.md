@@ -47,25 +47,6 @@ The fp8e4m3 development is **[Hybrid-Sensitivity-Weighted-Quantization (HSWQ)](h
 <img src="https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/logo.png" width="400">
 </p>
 
-### Status of This Repository
-
-This repository remains available strictly for:
-
-- Reference and research purposes
-- Advanced experimentation
-- Studying Nunchaku integration details, including:
-  - forward overrides
-  - LoRA mapping behavior
-  - ControlNet support
-  - First Block Cache
-  - SDXL-specific edge cases and limitations
-
-No guarantees are provided regarding future SDXL SVDQ functionality. **Use at your own risk.**
-
----
-
-These are Nunchaku unofficial loaders quantized with SVDQ (SVDQuant) method, based on [ComfyUI-nunchaku](https://github.com/nunchaku-ai/ComfyUI-nunchaku) with custom additions.
-
 ## Installation
 
 ### Quick Install
