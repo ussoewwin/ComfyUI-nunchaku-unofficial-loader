@@ -60,7 +60,7 @@ def load_diffusion_model_state_dict(
 
     dtype = model_options.get("dtype", None)
 
-    # ZIT: FP8のままVRAMに載せる（強制FP16解凍を無効化）
+    # ZIT: keep FP8 on VRAM (disable forced FP16 dequant)
     if model_options.get("custom_operations") is None:
         model_options = dict(model_options)
         model_options["custom_operations"] = comfy.ops.manual_cast

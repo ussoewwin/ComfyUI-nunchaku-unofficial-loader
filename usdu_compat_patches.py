@@ -1,6 +1,6 @@
-# HSWQ&Nunchaku Ultimate SD Upscale ノード用: テンソル形状・量子化まわりのランタイムパッチ
-# 本ノード実行時に発生する copy_ / FP8 bias / embedder / Lumina modulate・apply_gate のエラーを
-# 当拡張内のインポートとパッチ適用で対処する（他拡張・site-packages・本体は編集しない）
+# HSWQ&Nunchaku Ultimate SD Upscale: runtime patches for tensor shape and quantization
+# Addresses copy_ / FP8 bias / embedder / Lumina modulate and apply_gate errors at node execution
+# via imports and patches in this extension only (other extensions, site-packages, and core are not modified)
 
 from __future__ import annotations
 import logging
@@ -10,7 +10,7 @@ logger = logging.getLogger("nunchaku.usdu_compat_patches")
 
 
 def patch_comfy_kitchen_copy_guard():
-    """QuantizedTensor copy_ の shape 不一致時は copy せず dst を返す。"""
+    """When QuantizedTensor copy_ has shape mismatch, return dst without copying."""
     try:
         import comfy_kitchen.tensor.base as base
     except ImportError:
@@ -36,7 +36,7 @@ def patch_comfy_kitchen_copy_guard():
 
 
 def patch_comfy_kitchen_fp8_linear_bias_guard():
-    """FP8 linear/addmm で bias と weight の out_features 不一致時は dequant パスへ。"""
+    """When bias and weight out_features differ in FP8 linear/addmm, use dequant path."""
     try:
         import comfy_kitchen.tensor.base as base
         import comfy_kitchen.tensor.fp8 as fp8
@@ -99,7 +99,7 @@ def patch_comfy_kitchen_fp8_linear_bias_guard():
 
 
 def patch_control_embedder_linear_weight_transpose():
-    """manual_cast.Linear で weight が (in, out) のときだけ転置して F.linear。"""
+    """Transpose weight for F.linear only when manual_cast.Linear has weight (in, out)."""
     try:
         import comfy.ops as ops
     except ImportError:
@@ -127,7 +127,7 @@ def patch_control_embedder_linear_weight_transpose():
 
 
 def patch_lumina_modulate_scale_guard():
-    """Lumina modulate / apply_gate で scale・gate と x の last dim 不一致時のみ pad/trim。"""
+    """Pad or trim scale/gate to x last dim only when they differ in Lumina modulate/apply_gate."""
     try:
         import comfy.ldm.lumina.model as lumina_model
     except ImportError:
@@ -171,7 +171,7 @@ def patch_lumina_modulate_scale_guard():
 
 
 def apply_usdu_compat_patches():
-    """HSWQ&Nunchaku Ultimate SD Upscale 用の互換パッチを一括適用する。"""
+    """Apply all HSWQ&Nunchaku Ultimate SD Upscale compatibility patches."""
     patch_comfy_kitchen_copy_guard()
     patch_comfy_kitchen_fp8_linear_bias_guard()
     patch_control_embedder_linear_weight_transpose()

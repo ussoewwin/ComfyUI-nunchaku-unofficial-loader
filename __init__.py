@@ -147,7 +147,7 @@ mm.unet_offload_device = unet_offload_device_patched
 
 from .utils import get_package_version, get_plugin_version
 
-# HSWQ&Nunchaku Ultimate SD Upscale 用: copy_ / FP8 bias / embedder / Lumina の互換パッチを当拡張で適用
+# HSWQ&Nunchaku Ultimate SD Upscale: apply copy_ / FP8 bias / embedder / Lumina compat patches in this extension
 try:
     from .usdu_compat_patches import apply_usdu_compat_patches
     apply_usdu_compat_patches()
@@ -593,7 +593,7 @@ try:
                     )
                     model = out[0]
                     
-                    # デバッグ: パラメータの dtype とレイヤータイプを確認
+                    # Debug: check parameter dtypes and layer types
                     if hasattr(model, 'model') and hasattr(model.model, 'diffusion_model'):
                         dm = model.model.diffusion_model
                         total_params = 0
@@ -606,15 +606,14 @@ try:
                             elif param.dtype == torch.bfloat16 or param.dtype == torch.float16:
                                 bf16_params += param.numel()
                         sdxl_logger.info(f"[ZIT DEBUG] Total params: {total_params:,}, FP8: {fp8_params:,}, BF16/FP16: {bf16_params:,}")
-                        # レイヤータイプを確認
+                        # Check layer type
                         for name, module in dm.named_modules():
                             if hasattr(module, 'weight') and module.weight is not None:
                                 is_fp8_forced = isinstance(module, comfy.ops.fp8_ops_forced.Linear) if hasattr(comfy.ops, 'fp8_ops_forced') else False
                                 sdxl_logger.info(f"[ZIT DEBUG] Layer {name}: {type(module)}, is_fp8_ops_forced={is_fp8_forced}")
                                 break
                     
-                    # FP8の場合、manual_cast_dtypeをbfloat16に強制変更
-                    # ComfyUIのデフォルトはFP8 → float32になってしまうため
+                    # For FP8: force manual_cast_dtype to bfloat16 (ComfyUI default would cast FP8 to float32 otherwise)
                     if is_fp8 and hasattr(model, 'model') and hasattr(model.model, 'manual_cast_dtype'):
                         model.model.manual_cast_dtype = torch.bfloat16
                         sdxl_logger.info(f"[ZIT FP8] Forced manual_cast_dtype to bfloat16 for FP8 VRAM optimization")
