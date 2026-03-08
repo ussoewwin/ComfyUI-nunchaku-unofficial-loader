@@ -111,10 +111,8 @@ A ComfyUI node for upscaling images using tile-based image-to-image processing, 
 - **Module Safety**: Uses isolated module loading to prevent conflicts with other custom nodes
 
 #### FP8 (fp8e4m3) and torch.compile
-
-This node is compatible with **FP8 (fp8e4m3)** quantized models (e.g. HSWQ SDXL). On extension load, **usdu_compat_patches** are applied so that FP8-related runtime errors (QuantizedTensor `copy_` shape mismatch, FP8 linear/addmm bias mismatch, control embedder weight layout, Lumina modulate/apply_gate dimension mismatch) are handled inside this extension.
-
-**Important:** If **torch.compile** is enabled (ComfyUI or model settings), the compiled graph uses the original functions before patching, so these patches are **not** applied at runtime and the above errors can occur. When using this node with FP8/quantized models, **disable torch.compile** in ComfyUI and model options. With torch.compile disabled, `apply_usdu_compat_patches` remains effective. See `md/USDU_PATCH_FIX_DOCUMENTATION.md` for details.
+- **Purpose:** Use this node with FP8 quantized models (e.g. HSWQ SDXL) and torch.compile together.
+- **Patches:** On load, this extension applies compatibility patches (`usdu_compat_patches.py`) that fix copy_ shape mismatch, FP8 linear/addmm bias vs out_features, control embedder weight layout, and Lumina modulate/apply_gate dimension issues so the node works with FP8 and torch.compile.
 
 ### Nunchaku-ussoewwin Z-Image-Turbo DiT Loader
 
