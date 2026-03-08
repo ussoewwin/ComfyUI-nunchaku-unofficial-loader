@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 3.0.2
+
+- **README**: FP8 (fp8e4m3) and torch.compile subsection updated — purpose (use this node with FP8 and torch.compile together) and patches description.
+- See [Release Notes v3.0.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/3.0.2) for details.
+
 ## Version 3.0.0
 
 - **Breaking**: Aligned with SDXL SVDQ deprecation (see IMPORTANT NOTICE at top). Node registration reduced to the following three only:
