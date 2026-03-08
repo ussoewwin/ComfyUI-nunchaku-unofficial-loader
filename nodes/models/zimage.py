@@ -7,6 +7,7 @@ import logging
 import os
 
 import comfy.model_management
+import comfy.ops
 import comfy.utils
 import torch
 from comfy import model_detection, model_management
@@ -58,6 +59,11 @@ def load_diffusion_model_state_dict(
     skip_refiners = quantization_config.get("skip_refiners", False)
 
     dtype = model_options.get("dtype", None)
+
+    # ZIT: FP8のままVRAMに載せる（強制FP16解凍を無効化）
+    if model_options.get("custom_operations") is None:
+        model_options = dict(model_options)
+        model_options["custom_operations"] = comfy.ops.manual_cast
 
     # Allow loading unets from checkpoint files
     diffusion_model_prefix = model_detection.unet_prefix_from_state_dict(sd)

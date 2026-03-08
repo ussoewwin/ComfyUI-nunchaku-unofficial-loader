@@ -1,13 +1,4 @@
-"""
-Nunchaku-dedicated copy of Ultimate SD Upscale nodes.
-
-This file is intentionally a 1:1 copy of `ComfyUI_UltimateSDUpscale/nodes.py`,
-with a single functional change:
-
-- `shared.batch_as_tensor` is forced to float32 (and clamped) before the internal upscaler runs.
-
-No other behavior changes are intended.
-"""
+"""Nunchaku-dedicated Ultimate SD Upscale node. Uses usdu_bundle."""
 
 import logging
 import torch
@@ -17,7 +8,7 @@ from PIL import Image
 
 logger = logging.getLogger(__name__)
 
-# Lazy import to avoid errors if ComfyUI_UltimateSDUpscale is not installed
+# Lazy import from usdu_bundle
 usdu = None
 tensor_to_pil = None
 pil_to_tensor = None
@@ -34,68 +25,28 @@ def _ensure_imports():
             import sys
             import os
             
-            # Get ComfyUI_UltimateSDUpscale directory
             current_file = os.path.realpath(__file__)
-            nodes_dir = os.path.dirname(current_file)  # .../ComfyUI-nunchaku-unofficial-loader/nodes
-            loader_dir = os.path.dirname(nodes_dir)  # .../ComfyUI-nunchaku-unofficial-loader
-            custom_nodes_dir = os.path.dirname(loader_dir)  # .../custom_nodes
-            usdu_custom_node = os.path.join(custom_nodes_dir, "ComfyUI_UltimateSDUpscale")
-            
-            # Remove other custom_node paths from sys.path to avoid conflicts (like ComfyUI_UltimateSDUpscale does)
-            custom_node_paths = [path for path in sys.path if "custom_node" in path and path != usdu_custom_node]
+            nodes_dir = os.path.dirname(current_file)
+            loader_dir = os.path.dirname(nodes_dir)
+            usdu_bundle = os.path.join(loader_dir, "usdu_bundle")
+            if not os.path.isdir(usdu_bundle):
+                raise ImportError("usdu_bundle not found at %s" % usdu_bundle)
             original_sys_path = sys.path.copy()
-            for path in custom_node_paths:
-                if path in sys.path:
-                    sys.path.remove(path)
+            if usdu_bundle not in sys.path:
+                sys.path.insert(0, usdu_bundle)
             
-            # Add ComfyUI_UltimateSDUpscale to sys.path first
-            if usdu_custom_node not in sys.path:
-                sys.path.insert(0, usdu_custom_node)
-            
-            # Store original modules to avoid conflicts
-            original_modules = sys.modules.copy()
-            modules_used = ["modules", "modules.devices", "modules.images", "modules.processing", "modules.scripts", "modules.shared", "modules.upscaler", "utils"]
-            original_imported_modules = {}
-            for module in modules_used:
-                if module in sys.modules:
-                    original_imported_modules[module] = sys.modules.pop(module)
-            
+            modules_used = ["modules", "modules.devices", "modules.images", "modules.processing", "modules.scripts", "modules.shared", "modules.upscaler"]
+            original_imported_modules = {m: sys.modules.pop(m) for m in modules_used if m in sys.modules}
             try:
-                # Force reloading usdu_utils from USDU path
-                import importlib.util
-                spec = importlib.util.spec_from_file_location("usdu_utils", os.path.join(usdu_custom_node, "usdu_utils.py"))
-                usdu_utils = importlib.util.module_from_spec(spec)
-                sys.modules["usdu_utils"] = usdu_utils
-                spec.loader.exec_module(usdu_utils)
-                # Note: original USDU might expose tensor_to_pil/pil_to_tensor in usdu_utils
-                tensor_to_pil = getattr(usdu_utils, "tensor_to_pil", None)
-                if tensor_to_pil is None:
-                    # If not found, try to find where they are defined.
-                    # USDU structure changed? Let's fallback to modules.images or checking usdu_patch
-                    pass
-
-                # If the functions are not in usdu_utils.py, we might need to look elsewhere.
-                # But typically they are used in USDU. 
-                # Let's assume they are there as 'utils' import usually implies.
-                # Wait, 'from utils import ...' in USDU source suggests a file named utils.py existed?
-                # But ls showed usdu_utils.py. Maybe it was renamed.
-                
-                # Let's check if we can just import usdu_utils directly since it is in sys.path
-                # But "from utils import" in previous log suggests it logic.
-                
-                # Let's stick to loading usdu_utils.py for now.
-                tensor_to_pil = usdu_utils.tensor_to_pil
-                pil_to_tensor = usdu_utils.pil_to_tensor
-
                 from usdu_patch import usdu  # type: ignore
-                # from utils import tensor_to_pil, pil_to_tensor  # type: ignore (REPLACED due to conflict)
                 from modules.processing import StableDiffusionProcessing  # type: ignore
                 import modules.shared as shared  # type: ignore
                 from modules.upscaler import UpscalerData  # type: ignore
+                import usdu_utils as _usdu_utils  # type: ignore
+                tensor_to_pil = _usdu_utils.tensor_to_pil
+                pil_to_tensor = _usdu_utils.pil_to_tensor
             finally:
-                # Restore sys.path
                 sys.path = original_sys_path
-                # Restore original modules
                 sys.modules.update(original_imported_modules)
             
             MODES = {
@@ -111,7 +62,7 @@ def _ensure_imports():
                 "Half Tile + Intersections": usdu.USDUSFMode.HALF_TILE_PLUS_INTERSECTIONS,
             }
         except ImportError as e:
-            logger.error(f"Failed to import ComfyUI_UltimateSDUpscale: {e}")
+            logger.error("Failed to import usdu_bundle: %s", e)
             raise
 
 MAX_RESOLUTION = 8192
@@ -177,6 +128,7 @@ def USDU_base_inputs():
         # Misc
         ("force_uniform_tiles", ("BOOLEAN", {"default": True, "tooltip": "Force all tiles to be the same as the set tile size, even when tiles could be smaller. This can help prevent the model from working with irregular tile sizes."})),
         ("tiled_decode", ("BOOLEAN", {"default": False, "tooltip": "Whether to use tiled decoding when decoding tiles."})),
+        ("batch_size", ("INT", {"default": 1, "min": 1, "max": 4096, "step": 1, "tooltip": "The number of tiles to process in a batch. Higher values can reduce processing time but use more VRAM. If you get tensor size mismatch with FP8/FP4 (quantized) models, set this to 1."})),
     ]
 
     optional = []
@@ -220,7 +172,7 @@ class NunchakuUltimateSDUpscale:
         except Exception as e:
             logger.error(f"Failed to initialize NunchakuUltimateSDUpscale INPUT_TYPES: {e}", exc_info=True)
             # Provide fallback with default modes to allow node registration even if imports fail
-            # This ensures the node appears in the UI even if ComfyUI_UltimateSDUpscale is not properly installed
+            # Fallback INPUT_TYPES when usdu_bundle import fails
             fallback_modes = ["Linear", "Chess", "None"] if not MODES else list(MODES.keys())
             fallback_seam_modes = ["None", "Band Pass", "Half Tile", "Half Tile + Intersections"] if not SEAM_FIX_MODES else list(SEAM_FIX_MODES.keys())
             
@@ -250,6 +202,7 @@ class NunchakuUltimateSDUpscale:
                 ("seam_fix_padding", ("INT", {"default": 16, "min": 0, "max": MAX_RESOLUTION, "step": 8, "tooltip": "The padding to apply for the seam fix tiles."})),
                 ("force_uniform_tiles", ("BOOLEAN", {"default": True, "tooltip": "Force all tiles to be the same as the set tile size, even when tiles could be smaller. This can help prevent the model from working with irregular tile sizes."})),
                 ("tiled_decode", ("BOOLEAN", {"default": False, "tooltip": "Whether to use tiled decoding when decoding tiles."})),
+                ("batch_size", ("INT", {"default": 1, "min": 1, "max": 4096, "step": 1, "tooltip": "The number of tiles to process in a batch. Higher values can reduce processing time but use more VRAM. If you get tensor size mismatch with FP8/FP4 (quantized) models, set this to 1."})),
             ]
             optional = []
             return prepare_inputs(required, optional)
@@ -260,7 +213,7 @@ class NunchakuUltimateSDUpscale:
     CATEGORY = "image/upscaling"
     OUTPUT_TOOLTIPS = ("The final upscaled image.",)
     DESCRIPTION = "Upscales an image and runs image-to-image on tiles from the input image."
-    TITLE = "Nunchaku Ultimate SD Upscale"
+    TITLE = "HSWQ&Nunchaku Ultimate SD Upscale"
 
     def upscale(
         self,
@@ -289,6 +242,7 @@ class NunchakuUltimateSDUpscale:
         seam_fix_padding,
         force_uniform_tiles,
         tiled_decode,
+        batch_size=1,
         custom_sampler=None,
         custom_sigmas=None,
     ):
@@ -344,6 +298,7 @@ class NunchakuUltimateSDUpscale:
             SEAM_FIX_MODES[self.seam_fix_mode],
             custom_sampler,
             custom_sigmas,
+            batch_size,
         )
 
         # Disable logging

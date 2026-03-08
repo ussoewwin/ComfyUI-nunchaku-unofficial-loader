@@ -106,7 +106,7 @@ A ComfyUI node for upscaling images using tile-based image-to-image processing, 
 
 #### Usage Notes
 
-- **Requires ComfyUI_UltimateSDUpscale**: This node requires the `ComfyUI_UltimateSDUpscale` custom node to be installed
+- **Standalone**: This node does **not** require `ComfyUI_UltimateSDUpscale`. It uses a bundled copy (`usdu_bundle`) and works on its own. You can use this node without installing any other Ultimate SD Upscale extension.
 - **Color Range**: Automatically normalizes Nunchaku SDXL VAE's compressed color range (e.g., 0.15-0.85) to full range (0.0-1.0) to restore proper contrast and color saturation
 - **Module Safety**: Uses isolated module loading to prevent conflicts with other custom nodes
 
@@ -154,7 +154,7 @@ A ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node pr
 
 - Fixed NunchakuUltimateSDUpscale node registration issue with Nunchaku 1.2.0
   - Improved error handling in INPUT_TYPES to prevent node registration failures
-  - Node now appears in UI even if ComfyUI_UltimateSDUpscale import fails
+  - Node is standalone: uses bundled `usdu_bundle` and does not require ComfyUI_UltimateSDUpscale to be installed
   - See [Issue #2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/issues/2) for details
 - See [Release Notes v2.6.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.6.2) for details
 
