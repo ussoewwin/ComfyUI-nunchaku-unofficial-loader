@@ -6,6 +6,9 @@ import torch
 import yaml
 from packaging.version import InvalidVersion, Version
 
+# SDXL MultiGPU support (from comfyui-multigpu)
+import comfy.model_management as mm
+
 # vanilla and LTS compatibility snippet
 try:
     from comfy_compatibility.vanilla import prepare_vanilla_environment
@@ -52,7 +55,104 @@ logger = logging.getLogger(__name__)
 
 logger.info("=" * 40 + " ComfyUI-nunchaku Initialization " + "=" * 40)
 
+# SDXL MultiGPU initialization
+sdxl_logger = logging.getLogger("SDXL")
+sdxl_logger.propagate = False
+if not sdxl_logger.handlers:
+    handler = logging.StreamHandler()
+    formatter = logging.Formatter('%(message)s')
+    handler.setFormatter(formatter)
+    sdxl_logger.addHandler(handler)
+    sdxl_logger.setLevel(logging.INFO)
+
+# SDXL device management
+current_device = mm.get_torch_device()
+current_text_encoder_device = mm.text_encoder_device()
+current_unet_offload_device = mm.unet_offload_device()
+
+def set_current_device(device):
+    """Set the current device context for SDXL operations."""
+    global current_device
+    current_device = device
+    sdxl_logger.debug(f"[SDXL Initialization] current_device set to: {device}")
+
+def set_current_text_encoder_device(device):
+    """Set the current text encoder device context for CLIP models."""
+    global current_text_encoder_device
+    current_text_encoder_device = device
+    sdxl_logger.debug(f"[SDXL Initialization] current_text_encoder_device set to: {device}")
+
+def set_current_unet_offload_device(device):
+    """Set the current UNet offload device context."""
+    global current_unet_offload_device
+    current_unet_offload_device = device
+    sdxl_logger.debug(f"[SDXL Initialization] current_unet_offload_device set to: {device}")
+
+def get_current_device():
+    """Get the current device context for SDXL operations at runtime."""
+    return current_device
+
+def get_current_text_encoder_device():
+    """Get the current text encoder device context for CLIP models at runtime."""
+    return current_text_encoder_device
+
+def get_current_unet_offload_device():
+    """Get the current UNet offload device context at runtime."""
+    return current_unet_offload_device
+
+def get_torch_device_patched():
+    """Return SDXL-aware device selection for patched mm.get_torch_device."""
+    from .device_utils import get_device_list, is_accelerator_available
+    device = None
+    if (not is_accelerator_available() or mm.cpu_state == mm.CPUState.CPU or "cpu" in str(current_device).lower()):
+        device = torch.device("cpu")
+    else:
+        devs = set(get_device_list())
+        device = torch.device(current_device) if str(current_device) in devs else torch.device("cpu")
+    sdxl_logger.debug(f"[SDXL Core Patching] get_torch_device_patched returning device: {device} (current_device={current_device})")
+    return device
+
+def text_encoder_device_patched():
+    """Return SDXL-aware text encoder device for patched mm.text_encoder_device."""
+    from .device_utils import get_device_list, is_accelerator_available
+    device = None
+    if (not is_accelerator_available() or mm.cpu_state == mm.CPUState.CPU or "cpu" in str(current_text_encoder_device).lower()):
+        device = torch.device("cpu")
+    else:
+        devs = set(get_device_list())
+        device = torch.device(current_text_encoder_device) if str(current_text_encoder_device) in devs else torch.device("cpu")
+    sdxl_logger.info(f"[SDXL Core Patching] text_encoder_device_patched returning device: {device} (current_text_encoder_device={current_text_encoder_device})")
+    return device
+
+def unet_offload_device_patched():
+    """Return SDXL-aware UNet offload device for patched mm.unet_offload_device."""
+    from .device_utils import get_device_list, is_accelerator_available
+    device = None
+    if (not is_accelerator_available() or mm.cpu_state == mm.CPUState.CPU or "cpu" in str(current_unet_offload_device).lower()):
+        device = torch.device("cpu")
+    else:
+        devs = set(get_device_list())
+        device = torch.device(current_unet_offload_device) if str(current_unet_offload_device) in devs else torch.device("cpu")
+    sdxl_logger.debug(f"[SDXL Core Patching] unet_offload_device_patched returning device: {device} (current_unet_offload_device={current_unet_offload_device})")
+    return device
+
+sdxl_logger.info(f"[SDXL Core Patching] Patching mm.get_torch_device, mm.text_encoder_device, mm.unet_offload_device")
+sdxl_logger.info(f"[SDXL DEBUG] Initial current_device: {current_device}")
+sdxl_logger.info(f"[SDXL DEBUG] Initial current_text_encoder_device: {current_text_encoder_device}")
+sdxl_logger.info(f"[SDXL DEBUG] Initial current_unet_offload_device: {current_unet_offload_device}")
+
+mm.get_torch_device = get_torch_device_patched
+mm.text_encoder_device = text_encoder_device_patched
+mm.unet_offload_device = unet_offload_device_patched
+
 from .utils import get_package_version, get_plugin_version
+
+# HSWQ&Nunchaku Ultimate SD Upscale 用: copy_ / FP8 bias / embedder / Lumina の互換パッチを当拡張で適用
+try:
+    from .usdu_compat_patches import apply_usdu_compat_patches
+    apply_usdu_compat_patches()
+except Exception as e:
+    logger.debug("USDU compat patches not applied: %s", e)
 
 # Check if _patch_model method exists in NunchakuZImageTransformer2DModel
 try:
@@ -378,6 +478,163 @@ try:
     logger.info("Nunchaku Ultimate SD Upscale nodes registered successfully")
 except Exception as e:
     logger.error(f"Failed to register Nunchaku Ultimate SD Upscale nodes: {e}", exc_info=True)
+
+# SDXL MultiGPU node registration (UNET + CLIP, ref CheckpointLoaderSimple)
+try:
+    import folder_paths
+    import comfy.sd
+    from nodes import NODE_CLASS_MAPPINGS as GLOBAL_NODE_CLASS_MAPPINGS
+    from .device_utils import get_device_list
+
+    _UNETLoaderBase = GLOBAL_NODE_CLASS_MAPPINGS.get("UNETLoader")
+    if _UNETLoaderBase is None:
+        sdxl_logger.warning("[SDXL] UNETLoader not found in GLOBAL_NODE_CLASS_MAPPINGS")
+    else:
+
+        class NunchakuUssoewwinCheckpointLoaderSDXL(_UNETLoaderBase):
+            """Checkpoint Loader (SDXL) with device selection. Ref: CheckpointLoaderSimple."""
+
+            @classmethod
+            def INPUT_TYPES(cls):
+                base = _UNETLoaderBase.INPUT_TYPES()
+                base_req = dict(base.get("required", {}))
+                base_opt = dict(base.get("optional", {}))
+                devices = get_device_list()
+                default_dev = devices[1] if len(devices) > 1 else devices[0]
+                req = {
+                    "ckpt_name": (folder_paths.get_filename_list("checkpoints"), {"tooltip": "SDXL checkpoint to load MODEL and CLIP from (same as standard Load Checkpoint)."}),
+                    "weight_dtype": (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"],),
+                }
+                opt = {"device": (devices, {"default": default_dev})}
+                return {"required": req, "optional": opt}
+
+            RETURN_TYPES = ("MODEL", "CLIP")
+            OUTPUT_TOOLTIPS = ("The UNet diffusion model from checkpoint.", "The CLIP model from the SDXL checkpoint.")
+            FUNCTION = "load_checkpoint"
+            CATEGORY = "loaders"
+            TITLE = "Checkpoint Loader (SDXL)"
+
+            def load_checkpoint(self, ckpt_name, weight_dtype, device=None):
+                original_device = get_current_device()
+                if device is not None:
+                    set_current_device(device)
+                try:
+                    ckpt_path = folder_paths.get_full_path_or_raise("checkpoints", ckpt_name)
+                    model_options = {}
+                    if weight_dtype == "fp8_e4m3fn":
+                        model_options["dtype"] = torch.float8_e4m3fn
+                    elif weight_dtype == "fp8_e4m3fn_fast":
+                        model_options["dtype"] = torch.float8_e4m3fn
+                        model_options["fp8_optimizations"] = True
+                    elif weight_dtype == "fp8_e5m2":
+                        model_options["dtype"] = torch.float8_e5m2
+                    
+                    out = comfy.sd.load_checkpoint_guess_config(
+                        ckpt_path,
+                        output_vae=False,
+                        output_clip=True,
+                        embedding_directory=folder_paths.get_folder_paths("embeddings"),
+                        model_options=model_options,
+                    )
+                    model, clip, _v = out[:3]
+                    return (model, clip)
+                finally:
+                    set_current_device(original_device)
+
+        NODE_CLASS_MAPPINGS["NunchakuUssoewwinCheckpointLoaderSDXL"] = NunchakuUssoewwinCheckpointLoaderSDXL
+        sdxl_logger.info("[SDXL] Registered NunchakuUssoewwinCheckpointLoaderSDXL node (MODEL + CLIP)")
+
+        class UssoewwinCheckpointLoaderZImageTurbo(_UNETLoaderBase):
+            """Checkpoint Loader (Z Image Turbo) with device selection. Ref: CheckpointLoaderSimple."""
+
+            @classmethod
+            def INPUT_TYPES(cls):
+                base = _UNETLoaderBase.INPUT_TYPES()
+                base_req = dict(base.get("required", {}))
+                base_opt = dict(base.get("optional", {}))
+                devices = get_device_list()
+                default_dev = devices[1] if len(devices) > 1 else devices[0]
+                req = {
+                    "ckpt_name": (folder_paths.get_filename_list("checkpoints"), {"tooltip": "Z Image Turbo checkpoint to load MODEL and CLIP from (same as standard Load Checkpoint)."}),
+                    "weight_dtype": (["default", "fp8_e4m3fn", "fp8_e5m2"],),
+                }
+                opt = {"device": (devices, {"default": default_dev})}
+                return {"required": req, "optional": opt}
+
+            RETURN_TYPES = ("MODEL",)
+            OUTPUT_TOOLTIPS = ("The transformer diffusion model from checkpoint.",)
+            FUNCTION = "load_checkpoint"
+            CATEGORY = "loaders"
+            TITLE = "Checkpoint Loader (Z Image Turbo)"
+
+            def load_checkpoint(self, ckpt_name, weight_dtype, device=None):
+                original_device = get_current_device()
+                if device is not None:
+                    set_current_device(device)
+                try:
+                    import comfy.ops
+                    ckpt_path = folder_paths.get_full_path_or_raise("checkpoints", ckpt_name)
+                    model_options = {}
+                    is_fp8 = False
+                    if weight_dtype == "fp8_e4m3fn":
+                        model_options["dtype"] = torch.float8_e4m3fn
+                        model_options["custom_operations"] = comfy.ops.fp8_ops_forced
+                        is_fp8 = True
+                    elif weight_dtype == "fp8_e5m2":
+                        model_options["dtype"] = torch.float8_e5m2
+                        model_options["custom_operations"] = comfy.ops.fp8_ops_forced
+                        is_fp8 = True
+
+                    out = comfy.sd.load_checkpoint_guess_config(
+                        ckpt_path,
+                        output_vae=False,
+                        output_clip=False,
+                        model_options=model_options,
+                    )
+                    model = out[0]
+                    
+                    # デバッグ: パラメータの dtype とレイヤータイプを確認
+                    if hasattr(model, 'model') and hasattr(model.model, 'diffusion_model'):
+                        dm = model.model.diffusion_model
+                        total_params = 0
+                        fp8_params = 0
+                        bf16_params = 0
+                        for name, param in dm.named_parameters():
+                            total_params += param.numel()
+                            if param.dtype == torch.float8_e4m3fn or param.dtype == torch.float8_e5m2:
+                                fp8_params += param.numel()
+                            elif param.dtype == torch.bfloat16 or param.dtype == torch.float16:
+                                bf16_params += param.numel()
+                        sdxl_logger.info(f"[ZIT DEBUG] Total params: {total_params:,}, FP8: {fp8_params:,}, BF16/FP16: {bf16_params:,}")
+                        # レイヤータイプを確認
+                        for name, module in dm.named_modules():
+                            if hasattr(module, 'weight') and module.weight is not None:
+                                is_fp8_forced = isinstance(module, comfy.ops.fp8_ops_forced.Linear) if hasattr(comfy.ops, 'fp8_ops_forced') else False
+                                sdxl_logger.info(f"[ZIT DEBUG] Layer {name}: {type(module)}, is_fp8_ops_forced={is_fp8_forced}")
+                                break
+                    
+                    # FP8の場合、manual_cast_dtypeをbfloat16に強制変更
+                    # ComfyUIのデフォルトはFP8 → float32になってしまうため
+                    if is_fp8 and hasattr(model, 'model') and hasattr(model.model, 'manual_cast_dtype'):
+                        model.model.manual_cast_dtype = torch.bfloat16
+                        sdxl_logger.info(f"[ZIT FP8] Forced manual_cast_dtype to bfloat16 for FP8 VRAM optimization")
+                    
+                    return (model,)
+                finally:
+                    set_current_device(original_device)
+
+        NODE_CLASS_MAPPINGS["ZITCheckpointLoader"] = UssoewwinCheckpointLoaderZImageTurbo
+        sdxl_logger.info(f"[Z Image Turbo] Registered ZITCheckpointLoader node, RETURN_TYPES={UssoewwinCheckpointLoaderZImageTurbo.RETURN_TYPES}")
+except Exception as e:
+    sdxl_logger.exception(f"[SDXL] Failed to register NunchakuUssoewwinCheckpointLoaderSDXL: {e}")
+
+# HSWQ Loader registration
+try:
+    from .nodes.hswq_loader_node import HSWQLoader
+    NODE_CLASS_MAPPINGS["HSWQLoader"] = HSWQLoader
+    sdxl_logger.info("[SDXL] Registered HSWQLoader node (Scaled FP8 Loader)")
+except (ImportError, ModuleNotFoundError) as e:
+    sdxl_logger.exception(f"[SDXL] Failed to register HSWQLoader: {e}")
 
 NODE_DISPLAY_NAME_MAPPINGS = {k: v.TITLE for k, v in NODE_CLASS_MAPPINGS.items()}
 WEB_DIRECTORY = "js"
