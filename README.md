@@ -90,9 +90,9 @@ A ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints,
 - **Outputs**: MODEL and CLIP only; use a separate VAE loader if needed
 - **Category**: Loaders (`loaders`)
 
-### Nunchaku Ultimate SD Upscale
+### HSWQ&Nunchaku Ultimate SD Upscale
 
-<img src="png/upscale.png" alt="Nunchaku Ultimate SD Upscale Node" width="400">
+<img src="png/upscale.png" alt="HSWQ&Nunchaku Ultimate SD Upscale" width="400">
 
 A ComfyUI node for upscaling images using tile-based image-to-image processing, specifically optimized for Nunchaku SDXL models.
 
@@ -109,6 +109,12 @@ A ComfyUI node for upscaling images using tile-based image-to-image processing, 
 - **Standalone**: This node does **not** require `ComfyUI_UltimateSDUpscale`. It uses a bundled copy (`usdu_bundle`) and works on its own. You can use this node without installing any other Ultimate SD Upscale extension.
 - **Color Range**: Automatically normalizes Nunchaku SDXL VAE's compressed color range (e.g., 0.15-0.85) to full range (0.0-1.0) to restore proper contrast and color saturation
 - **Module Safety**: Uses isolated module loading to prevent conflicts with other custom nodes
+
+#### FP8 (fp8e4m3) and torch.compile
+
+This node is compatible with **FP8 (fp8e4m3)** quantized models (e.g. HSWQ SDXL). On extension load, **usdu_compat_patches** are applied so that FP8-related runtime errors (QuantizedTensor `copy_` shape mismatch, FP8 linear/addmm bias mismatch, control embedder weight layout, Lumina modulate/apply_gate dimension mismatch) are handled inside this extension.
+
+**Important:** If **torch.compile** is enabled (ComfyUI or model settings), the compiled graph uses the original functions before patching, so these patches are **not** applied at runtime and the above errors can occur. When using this node with FP8/quantized models, **disable torch.compile** in ComfyUI and model options. With torch.compile disabled, `apply_usdu_compat_patches` remains effective. See `md/USDU_PATCH_FIX_DOCUMENTATION.md` for details.
 
 ### Nunchaku-ussoewwin Z-Image-Turbo DiT Loader
 
