@@ -65,10 +65,6 @@ Restart ComfyUI to load the nodes.
 
 ## Requirements
 
-**Nunchaku library**: You **MUST** have the Nunchaku library version **v1.1.0 or later** installed. This is a hard requirement - other versions will not work.
-
-**Pre-built package**: If you are using Nunchaku with CUDA 13.0 (cu130), use the pre-built package available at [ussoewwin/nunchaku-build-on-cu130-windows](https://huggingface.co/ussoewwin/nunchaku-build-on-cu130-windows).
-
 ## Nodes
 
 ### Checkpoint Loader (SDXL)
