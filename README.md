@@ -1,4 +1,4 @@
-# ComfyUI-nunchaku-unofficial-loader
+# ComfyUI-HSWQ-and-nunchaku-unofficial-loader
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/icon.png?v=2" width="128">
@@ -112,7 +112,7 @@ A ComfyUI node for upscaling images using tile-based image-to-image processing, 
 
 #### FP8 (fp8e4m3) and torch.compile
 - **Purpose:** Use this node with FP8 quantized models (e.g. HSWQ SDXL) and torch.compile together.
-- **Patches:** On load, this extension applies compatibility patches (`usdu_compat_patches.py`) that fix copy_ shape mismatch, FP8 linear/addmm bias vs out_features, control embedder weight layout, and Lumina modulate/apply_gate dimension issues so the node works with FP8 and torch.compile.
+- **Patches:** On load, this extension applies compatibility patches (`usdu_compat_patches.py`) that fix copy_ shape mismatch, FP8 linear/addmm bias–out_features mismatch, control embedder weight layout, and Lumina modulate/apply_gate dimension issues so the node works with FP8 and torch.compile.
 
 ### Nunchaku-ussoewwin Z-Image-Turbo DiT Loader
 
