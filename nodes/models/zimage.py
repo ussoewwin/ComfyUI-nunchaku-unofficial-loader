@@ -13,7 +13,12 @@ import torch
 from comfy import model_detection, model_management
 from nunchaku.models.transformers.transformer_zimage import NunchakuZImageTransformer2DModel
 from nunchaku.models.transformers.utils import patch_scale_key
-from nunchaku.utils import check_hardware_compatibility, get_gpu_memory, get_precision, get_precision_from_quantization_config
+from nunchaku.utils import (
+    check_hardware_compatibility,
+    get_gpu_memory,
+    get_precision,
+    get_precision_from_quantization_config,
+)
 
 from ...model_configs.zimage import NunchakuZImage
 from ...model_patcher import NunchakuModelPatcher
@@ -23,12 +28,17 @@ from ..utils import get_filename_list, get_full_path_or_raise
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 
 # Configure logging
-logging.basicConfig(level=getattr(logging, log_level, logging.INFO), format="%(asctime)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=getattr(logging, log_level, logging.INFO),
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 
 def load_diffusion_model_state_dict(
-    sd: dict[str, torch.Tensor], metadata: dict[str, str] = {}, model_options: dict = {}
+    sd: dict[str, torch.Tensor],
+    metadata: dict[str, str] = {},
+    model_options: dict = {},
 ):
     """
     Load a Nunchaku-quantized Z-Image-Turbo diffusion model.
@@ -67,7 +77,9 @@ def load_diffusion_model_state_dict(
 
     # Allow loading unets from checkpoint files
     diffusion_model_prefix = model_detection.unet_prefix_from_state_dict(sd)
-    temp_sd = comfy.utils.state_dict_prefix_replace(sd, {diffusion_model_prefix: ""}, filter_keys=True)
+    temp_sd = comfy.utils.state_dict_prefix_replace(
+        sd, {diffusion_model_prefix: ""}, filter_keys=True
+    )
     if len(temp_sd) > 0:
         sd = temp_sd
 
@@ -83,7 +95,7 @@ def load_diffusion_model_state_dict(
     config = json.loads(metadata.get("config", "{}"))
     with torch.device("meta"):
         transformer = NunchakuZImageTransformer2DModel.from_config(config)
-    
+
     torch_dtype = dtype if dtype is not None else torch.bfloat16
     transformer = transformer.to(torch_dtype)
 
@@ -91,8 +103,10 @@ def load_diffusion_model_state_dict(
     precision_auto = get_precision()
     if precision_auto == "fp4":
         precision_auto = "nvfp4"
-    
-    transformer._patch_model(skip_refiners=skip_refiners, precision=precision_auto, rank=rank)
+
+    transformer._patch_model(
+        skip_refiners=skip_refiners, precision=precision_auto, rank=rank
+    )
     transformer = transformer.to_empty(device=load_device)
 
     # Patch scale keys (same as from_pretrained)
@@ -109,7 +123,9 @@ def load_diffusion_model_state_dict(
             "scale_shift": 0,
             "rank": rank,
             "precision": precision,
-            "transformer_offload_device": offload_device if model_options.get("cpu_offload_enabled", False) else None,
+            "transformer_offload_device": offload_device
+            if model_options.get("cpu_offload_enabled", False)
+            else None,
         }
     )
     model_config.optimizations["fp8"] = False
@@ -120,7 +136,9 @@ def load_diffusion_model_state_dict(
 
     if dtype is None:
         unet_dtype = model_management.unet_dtype(
-            model_params=parameters, supported_dtypes=unet_weight_dtype, weight_dtype=weight_dtype
+            model_params=parameters,
+            supported_dtypes=unet_weight_dtype,
+            weight_dtype=weight_dtype,
         )
     else:
         unet_dtype = dtype
@@ -129,7 +147,9 @@ def load_diffusion_model_state_dict(
         unet_dtype, load_device, model_config.supported_inference_dtypes
     )
     model_config.set_inference_dtype(unet_dtype, manual_cast_dtype)
-    model_config.custom_operations = model_options.get("custom_operations", model_config.custom_operations)
+    model_config.custom_operations = model_options.get(
+        "custom_operations", model_config.custom_operations
+    )
     if model_options.get("fp8_optimizations", False):
         model_config.optimizations["fp8"] = True
 
@@ -144,7 +164,9 @@ def load_diffusion_model_state_dict(
     if comfy.model_management.force_channels_last():
         model.diffusion_model.to(memory_format=torch.channels_last)
     model = model.to(offload_device)
-    return NunchakuModelPatcher(model, load_device=load_device, offload_device=offload_device)
+    return NunchakuModelPatcher(
+        model, load_device=load_device, offload_device=offload_device
+    )
 
 
 class NunchakuZImageDiTLoader:
@@ -220,7 +242,12 @@ class NunchakuZImageDiTLoader:
     TITLE = "Nunchaku-ussoewwin Z-Image-Turbo DiT Loader"
 
     def load_model(
-        self, model_name: str, cpu_offload: str, num_blocks_on_gpu: int = 1, use_pin_memory: str = "disable", **kwargs
+        self,
+        model_name: str,
+        cpu_offload: str,
+        num_blocks_on_gpu: int = 1,
+        use_pin_memory: str = "disable",
+        **kwargs,
     ):
         """
         Load the Z-Image-Turbo model from file and return a patched model.

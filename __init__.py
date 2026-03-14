@@ -147,12 +147,273 @@ mm.unet_offload_device = unet_offload_device_patched
 
 from .utils import get_package_version, get_plugin_version
 
+# -------------------------------------------------------------------------
+# HSWQ Pin Cache: comfy.pinned_memory の pin_memory / unpin_memory を
+# monkey-patch し、cudaHostRegister/Unregister の繰り返しを回避する。
+#
+# FaceDetailer 等でモデルが UNet → VAE → UNet と切り替わるたび、
+# 全 weight の pin バッファが破棄・再作成されるのを防ぐ。
+# unpin 時にバッファをキャッシュし、再 pin 時に再利用する。
+# -------------------------------------------------------------------------
+try:
+    import collections
+    import comfy.pinned_memory as _pm_mod
+    import comfy.memory_management as _mem_mod
+    import comfy.model_management as _mm_mod
+    from comfy.cli_args import args as _cli_args
+
+    _pin_cache_logger = logging.getLogger("HSWQ_PinCache")
+
+    _PIN_BUFFER_POOL = collections.defaultdict(list)
+    _PIN_CACHE_TOTAL = 0
+    _MAX_PIN_CACHE_BYTES = 16 * 1024 * 1024 * 1024
+    _pin_cache_stats = {"hits": 0, "misses": 0, "evictions": 0, "unpins": 0, "swaps": 0}
+
+    _orig_pm_pin = _pm_mod.pin_memory
+    _orig_pm_unpin = _pm_mod.unpin_memory
+
+    def _cached_pin_memory(module):
+        global _PIN_CACHE_TOTAL
+        if module.pin_failed or _cli_args.disable_pinned_memory or _pm_mod.get_pin(module) is not None:
+            return
+
+        size = _mem_mod.vram_aligned_size([module.weight, module.bias])
+
+        pool = _PIN_BUFFER_POOL.get(size)
+        if pool:
+            pin = pool.pop()
+            module._pin = pin
+            _PIN_CACHE_TOTAL -= size
+            _pin_cache_stats["hits"] += 1
+            h = _pin_cache_stats["hits"]
+            if h <= 3 or h % 200 == 0:
+                _pin_cache_logger.warning(
+                    "[HSWQ PinCache] HIT size=%d pool_total=%.1f MB hits=%d misses=%d",
+                    size, _PIN_CACHE_TOTAL / (1024 * 1024), h, _pin_cache_stats["misses"],
+                )
+            return True
+
+        _pin_cache_stats["misses"] += 1
+        pin = torch.empty((size,), dtype=torch.uint8)
+        if _mm_mod.pin_memory(pin):
+            module._pin = pin
+        else:
+            module.pin_failed = True
+            return False
+        return True
+
+    def _cached_unpin_memory(module):
+        global _PIN_CACHE_TOTAL
+        if _pm_mod.get_pin(module) is None:
+            return 0
+        pin = module._pin
+        size = pin.numel() * pin.element_size()
+        del module._pin
+
+        _pin_cache_stats["unpins"] += 1
+        u = _pin_cache_stats["unpins"]
+
+        if _PIN_CACHE_TOTAL + size <= _MAX_PIN_CACHE_BYTES:
+            _PIN_BUFFER_POOL[size].append(pin)
+            _PIN_CACHE_TOTAL += size
+            if u <= 3 or u % 200 == 0:
+                _pin_cache_logger.warning(
+                    "[HSWQ PinCache] STORE size=%d pool_total=%.1f MB pool_keys=%d unpins=%d",
+                    size, _PIN_CACHE_TOTAL / (1024 * 1024),
+                    len(_PIN_BUFFER_POOL), u,
+                )
+        else:
+            # Adaptive eviction: evict buffers of DIFFERENT sizes to make room.
+            # When models switch (e.g. ZImage→Lumina2), this replaces the old
+            # model's cached buffers with the new model's, allowing both to coexist.
+            freed = 0
+            for other_size in list(_PIN_BUFFER_POOL.keys()):
+                if other_size == size:
+                    continue
+                other_pool = _PIN_BUFFER_POOL[other_size]
+                while other_pool and _PIN_CACHE_TOTAL + size > _MAX_PIN_CACHE_BYTES:
+                    old_pin = other_pool.pop()
+                    _mm_mod.unpin_memory(old_pin)
+                    _PIN_CACHE_TOTAL -= other_size
+                    freed += other_size
+                if _PIN_CACHE_TOTAL + size <= _MAX_PIN_CACHE_BYTES:
+                    break
+
+            if _PIN_CACHE_TOTAL + size <= _MAX_PIN_CACHE_BYTES:
+                _PIN_BUFFER_POOL[size].append(pin)
+                _PIN_CACHE_TOTAL += size
+                _pin_cache_stats["swaps"] += 1
+                s = _pin_cache_stats["swaps"]
+                if s <= 3 or s % 100 == 0:
+                    _pin_cache_logger.warning(
+                        "[HSWQ PinCache] SWAP size=%d freed=%.1f MB pool_total=%.1f MB swaps=%d",
+                        size, freed / (1024 * 1024),
+                        _PIN_CACHE_TOTAL / (1024 * 1024), s,
+                    )
+            else:
+                _mm_mod.unpin_memory(pin)
+                _pin_cache_stats["evictions"] += 1
+                e = _pin_cache_stats["evictions"]
+                if e <= 3 or e % 100 == 0:
+                    _pin_cache_logger.warning(
+                        "[HSWQ PinCache] EVICT size=%d (%.1f MB / %.1f MB) evictions=%d",
+                        size, _PIN_CACHE_TOTAL / (1024 * 1024),
+                        _MAX_PIN_CACHE_BYTES / (1024 * 1024), e,
+                    )
+
+        return size
+
+    _pm_mod.pin_memory = _cached_pin_memory
+    _pm_mod.unpin_memory = _cached_unpin_memory
+
+    _pin_cache_logger.warning(
+        "[HSWQ PinCache] pin buffer cache installed (max %.1f GB)",
+        _MAX_PIN_CACHE_BYTES / (1024 ** 3),
+    )
+
+except Exception as e:
+    logger.debug("HSWQ PinCache: not installed: %s", e)
+
+# -------------------------------------------------------------------------
+# HSWQ PinDebug: comfy.model_management.pin_memory 呼び出しの実態をログに出す
+# (PinCache がキャッシュヒットした場合は model_management.pin_memory を
+#  呼ばないため、このログにはキャッシュミス時のみ出力される)
+# -------------------------------------------------------------------------
+try:
+    import inspect
+    import comfy.model_management as _mm_pindebug
+
+    _orig_mm_pin = getattr(_mm_pindebug, "pin_memory", None)
+
+    if _orig_mm_pin is not None and not getattr(_orig_mm_pin, "_hswq_pindebug_wrapped", False):
+        _pin_dbg_logger = logging.getLogger("HSWQ_PinDebug")
+        _pin_dbg_call_count = [0]
+
+        def _hswq_debug_pin_memory(tensor):
+            _pin_dbg_call_count[0] += 1
+            c = _pin_dbg_call_count[0]
+            try:
+                if c <= 5 or c % 500 == 0:
+                    _pin_dbg_logger.warning(
+                        "[HSWQ PinDebug] pin_memory called (#%d): device=%s, dtype=%s, shape=%s, nbytes=%d",
+                        c,
+                        getattr(tensor, "device", None),
+                        getattr(tensor, "dtype", None),
+                        tuple(getattr(tensor, "shape", [])),
+                        getattr(tensor, "nbytes", -1),
+                    )
+                    stack = inspect.stack()[1]
+                    _pin_dbg_logger.warning(
+                        "[HSWQ PinDebug] caller: %s:%d (%s)",
+                        stack.filename,
+                        stack.lineno,
+                        stack.function,
+                    )
+            except Exception:
+                pass
+            return _orig_mm_pin(tensor)
+
+        setattr(_hswq_debug_pin_memory, "_hswq_pindebug_wrapped", True)
+        _mm_pindebug.pin_memory = _hswq_debug_pin_memory
+        _pin_dbg_logger.warning("[HSWQ PinDebug] model_management.pin_memory debug wrapper installed")
+except Exception as e:
+    logger.debug("HSWQ PinDebug: not installed: %s", e)
+
 # HSWQ&Nunchaku Ultimate SD Upscale: apply copy_ / FP8 bias / embedder / Lumina compat patches in this extension
 try:
     from .usdu_compat_patches import apply_usdu_compat_patches
     apply_usdu_compat_patches()
 except Exception as e:
     logger.debug("USDU compat patches not applied: %s", e)
+
+# torch.compile + FP8 + Lumina/Flux + comfy_kitchen 互換パッチ
+# NunchakuFluxLoraStacker のパッチモジュールから安全なパッチのみ選択適用:
+#   - LoraDiff.calculate_weight: reshape != weight.shape の LoRA をスキップ (根本対策)
+#   - lumina.modulate / apply_gate: hidden_dim 不一致時の安全フォールバック
+#
+# 注意: グローバルな F.linear / matmul / mul / add パッチは適用しない。
+# これらは RuntimeError をキャッチしてテンソルをスライスするが、ComfyUI 本体が
+# 同じ RuntimeError を使って不正な LoRA を検出・スキップしているため、
+# グローバルパッチが ComfyUI のエラーハンドリングを横取りし、壊れた次元の
+# テンソルが後続の RMSNorm 等でクラッシュを引き起こす。
+try:
+    import importlib
+    _lora_stacker_patches = None
+    _lora_stacker_root = Path(__file__).parent.parent / "ComfyUI-NunchakuFluxLoraStacker" / "patches"
+    _lora_stacker_patch_file = _lora_stacker_root / "zimage_fp8_torchcompile.py"
+    if _lora_stacker_patch_file.exists():
+        spec = importlib.util.spec_from_file_location(
+            "nunchaku_lora_stacker_patches.zimage_fp8_torchcompile",
+            str(_lora_stacker_patch_file),
+        )
+        if spec and spec.loader:
+            _lora_stacker_patches = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(_lora_stacker_patches)
+
+    _applied = []
+    if _lora_stacker_patches:
+        # LoRA reshape != weight.shape をスキップ (根本対策: 不正 LoRA の適用を防ぐ)
+        _fn = getattr(_lora_stacker_patches, "_apply_lumina_modulate_patch", None)
+        if _fn and _fn():
+            _applied.append("lumina.modulate")
+        _fn = getattr(_lora_stacker_patches, "_apply_lumina_apply_gate_patch", None)
+        if _fn and _fn():
+            _applied.append("lumina.apply_gate")
+
+        # LoraDiff.calculate_weight パッチは apply_patches() 末尾にあるため直接適用
+        try:
+            import comfy.weight_adapter.lora as _lora_mod
+            _LoraDiff = getattr(_lora_mod, "LoraDiff", None)
+            if _LoraDiff is not None:
+                _orig_cw = getattr(_LoraDiff, "calculate_weight", None)
+                if _orig_cw and not getattr(_orig_cw, "_hswq_lora_skip_patched", False):
+                    import torch as _torch_lora
+
+                    def _lora_skip_calculate_weight(
+                        self, weight, key, strength, strength_model, offset,
+                        function, intermediate_dtype=None, original_weight=None,
+                    ):
+                        if intermediate_dtype is None:
+                            intermediate_dtype = _torch_lora.float32
+                        v = self.weights
+                        reshape = v[5]
+                        if reshape is not None and tuple(reshape) != weight.shape:
+                            logger.warning(
+                                "LoRA %s: skip %s (reshape %s != weight %s) [HSWQ compat]",
+                                self.name, key, list(reshape), list(weight.shape),
+                            )
+                            return weight
+                        try:
+                            lora_diff = _torch_lora.mm(
+                                v[0].flatten(start_dim=1), v[1].flatten(start_dim=1)
+                            )
+                            if lora_diff.numel() != weight.numel():
+                                logger.warning(
+                                    "LoRA %s: skip %s (numel %d != %d) [HSWQ compat]",
+                                    self.name, key, lora_diff.numel(), weight.numel(),
+                                )
+                                return weight
+                        except Exception:
+                            return weight
+                        return _orig_cw(
+                            self, weight=weight, key=key, strength=strength,
+                            strength_model=strength_model, offset=offset,
+                            function=function, intermediate_dtype=intermediate_dtype,
+                            original_weight=original_weight,
+                        )
+
+                    _lora_skip_calculate_weight._hswq_lora_skip_patched = True
+                    _LoraDiff.calculate_weight = _lora_skip_calculate_weight
+                    _applied.append("LoraDiff.calculate_weight")
+        except Exception as e:
+            logger.debug("LoraDiff patch failed: %s", e)
+
+    if _applied:
+        logger.info("z_image/FP8/torch.compile compat patches applied: %s", ", ".join(_applied))
+    else:
+        logger.debug("No torch.compile compat patches applied")
+except Exception as e:
+    logger.debug("Torch compile compat patches not applied: %s", e)
 
 # Check if _patch_model method exists in NunchakuZImageTransformer2DModel
 try:
@@ -578,11 +839,11 @@ try:
                     is_fp8 = False
                     if weight_dtype == "fp8_e4m3fn":
                         model_options["dtype"] = torch.float8_e4m3fn
-                        model_options["custom_operations"] = comfy.ops.fp8_ops_forced
+                        model_options["custom_operations"] = comfy.ops.fp8_ops
                         is_fp8 = True
                     elif weight_dtype == "fp8_e5m2":
                         model_options["dtype"] = torch.float8_e5m2
-                        model_options["custom_operations"] = comfy.ops.fp8_ops_forced
+                        model_options["custom_operations"] = comfy.ops.fp8_ops
                         is_fp8 = True
 
                     out = comfy.sd.load_checkpoint_guess_config(
@@ -609,7 +870,7 @@ try:
                         # Check layer type
                         for name, module in dm.named_modules():
                             if hasattr(module, 'weight') and module.weight is not None:
-                                is_fp8_forced = isinstance(module, comfy.ops.fp8_ops_forced.Linear) if hasattr(comfy.ops, 'fp8_ops_forced') else False
+                                is_fp8_forced = isinstance(module, comfy.ops.fp8_ops.Linear) if hasattr(comfy.ops, 'fp8_ops') else False
                                 sdxl_logger.info(f"[ZIT DEBUG] Layer {name}: {type(module)}, is_fp8_ops_forced={is_fp8_forced}")
                                 break
                     
@@ -627,6 +888,21 @@ try:
 except Exception as e:
     sdxl_logger.exception(f"[SDXL] Failed to register NunchakuUssoewwinCheckpointLoaderSDXL: {e}")
 
+# Z Image FP8 E4M3 専用 DiT / UNet Loader（HSWQ・Nunchaku 非依存 UNet Loader は直下モジュールから）
+try:
+    from .hswq.zimage_fp8_e4m3_hswq import HSWQZImageFP8E4M3DiTLoader
+    NODE_CLASS_MAPPINGS["HSWQZImageFP8E4M3DiTLoader"] = HSWQZImageFP8E4M3DiTLoader
+    logger.info("Registered HSWQ Z Image FP8 E4M3 DiT Loader (with z_image/FP8/torch.compile compat patches)")
+except (ImportError, ModuleNotFoundError) as e:
+    logger.debug("HSWQ Z Image FP8 E4M3 DiT Loader not registered: %s", e)
+
+try:
+    from .hswq.zimage_fp8_e4m3_unet import HSWQZImageFP8E4M3UNetLoader
+    NODE_CLASS_MAPPINGS["HSWQZImageFP8E4M3UNetLoader"] = HSWQZImageFP8E4M3UNetLoader
+    logger.info("Registered HSWQ Z Image FP8 E4M3 UNet Loader (ComfyUI standard UNet loader wrapper)")
+except (ImportError, ModuleNotFoundError) as e:
+    logger.debug("HSWQ Z Image FP8 E4M3 UNet Loader not registered: %s", e)
+
 # HSWQ Loader registration
 try:
     from .nodes.hswq_loader_node import HSWQLoader
@@ -634,6 +910,14 @@ try:
     sdxl_logger.info("[SDXL] Registered HSWQLoader node (Scaled FP8 Loader)")
 except (ImportError, ModuleNotFoundError) as e:
     sdxl_logger.exception(f"[SDXL] Failed to register HSWQLoader: {e}")
+
+# HSWQ Batched Detailer (SEGS) - phase-split version to minimize model switching
+try:
+    from .nodes.hswq_batched_detailer import HSWQBatchedDetailer
+    NODE_CLASS_MAPPINGS["HSWQBatchedDetailer"] = HSWQBatchedDetailer
+    logger.info("Registered HSWQ Batched Detailer (SEGS) (phase-split model-switch optimization)")
+except (ImportError, ModuleNotFoundError) as e:
+    logger.debug("HSWQ Batched Detailer not registered: %s", e)
 
 NODE_DISPLAY_NAME_MAPPINGS = {k: v.TITLE for k, v in NODE_CLASS_MAPPINGS.items()}
 WEB_DIRECTORY = "js"
