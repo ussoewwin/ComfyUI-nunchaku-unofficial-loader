@@ -5,8 +5,8 @@ requires = [ "setuptools>=61", "wheel" ]
 
 [project]
 name = "comfyui-nunchaku-unofficial-loader"
-version = "3.1.1"
-description = "Unofficial Nunchaku SDXL Dit Loader with LoRA loader, Upscaler"
+version = "3.1.2"
+description = "Hybrid-Sensitivity-Weighted-Quantization fp8e4m3 UNet Loader, Upscaler, Detailer(segs)"
 license = { file = "LICENCE.txt" }
 requires-python = ">=3.10,<3.14"
 #  Used by Comfy Registry https://comfyregistry.org
@@ -126,7 +126,7 @@ line_length = 120
 
 [tool.comfy]
 PublisherId = "ussoewwin"
-DisplayName = "ComfyUI-nunchaku-unofficial-loader"
+DisplayName = "ComfyUI-HSWQ-and-unofficial-nunchaku-loader"
 Id = "a88e4ec0-69a4-407b-831a-4913cd98f4d1"
 Icon = "https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/icon.png"
 
