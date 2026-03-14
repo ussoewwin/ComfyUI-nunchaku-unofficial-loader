@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 3.1.1
+
+- **Fixed**: Bug fixes and corrections (loader registration, zimage model handling, USDU crop model patch).
+- See [Release Notes v3.1.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.1) for details.
+
 ## Version 3.1.0
 
 - **Added** two new nodes:
