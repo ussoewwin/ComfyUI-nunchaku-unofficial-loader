@@ -42,7 +42,7 @@ def crop_model_cond(
                 cropper = ModelPatchCropper(patch).crop(
                     crop_regions, canvas_size, latent_crop
                 )
-            applied_croppers[id(patch)] = cropper
+                applied_croppers[id(patch)] = cropper
     try:
         yield patched_model
     finally:
