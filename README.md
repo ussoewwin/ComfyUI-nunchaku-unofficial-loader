@@ -123,8 +123,6 @@ With **Dynamic VRAM Loading**, ComfyUI loads each layer on demand (CPU → GPU) 
 - **Node**: Loads the UNet (MODEL) from HSWQ Z Image FP8 E4M3 checkpoints like the standard UNet loader.
 - **Cache (extension-wide)**: Monkey-patches `comfy.pinned_memory.pin_memory` and `unpin_memory`. On unpin, buffers are stored in a size-keyed pool (up to a cap, e.g. 16GB) instead of being destroyed. On pin, a matching buffer is reused when available, avoiding repeated `cudaHostRegister`/`cudaHostUnregister` and reducing stalls.
 
-See [Pin Memory Problem and HSWQ Optimization](docs/pin_memory_optimization.md) for full details, design, and verification.
-
 ### HSWQ Batched Detailer (SEGS)
 
 <img src="png/detailersegs.png" alt="HSWQ Batched Detailer (SEGS)" width="400">
