@@ -110,6 +110,51 @@ A ComfyUI node for upscaling images using tile-based image-to-image processing, 
 - **Purpose:** Use this node with FP8 quantized models (e.g. HSWQ SDXL) and torch.compile together.
 - **Patches:** On load, this extension applies compatibility patches (`usdu_compat_patches.py`) that fix copy_ shape mismatch, FP8 linear/addmm bias–out_features mismatch, control embedder weight layout, and Lumina modulate/apply_gate dimension issues so the node works with FP8 and torch.compile.
 
+### HSWQ Z Image FP8 E4M3 UNet Loader
+
+<img src="png/hswqunet.png" alt="HSWQ Z Image FP8 E4M3 UNet Loader" width="400">
+
+Standard ComfyUI UNet loader wrapper that loads HSWQ Z-Image FP8 E4M3 diffusion models. When this extension is loaded, it also installs a **Pin Buffer Cache** that patches ComfyUI’s `pin_memory` / `unpin_memory` used by Dynamic VRAM Loading.
+
+#### Why the Pin Buffer Cache matters
+
+With **Dynamic VRAM Loading**, ComfyUI loads each layer on demand (CPU → GPU) and uses **pinned memory** for fast transfer. When a model is unloaded, all pin buffers are destroyed; when the same model is loaded again, new buffers are created and re-registered with the CUDA API (`cudaHostRegister` / `cudaHostUnregister`). Those calls are expensive (page-table and GPU MMU updates, CPU–GPU sync). With many layers (e.g. Lumina2 ~200), a single model switch can trigger hundreds of register/unregister calls and cause severe slowdowns—especially in workflows that switch models often (e.g. FaceDetailer: VAE → UNet → VAE per segment).
+
+#### What this loader does
+
+- **Node**: Loads the UNet (MODEL) from HSWQ Z Image FP8 E4M3 checkpoints like the standard UNet loader.
+- **Cache (extension-wide)**: Monkey-patches `comfy.pinned_memory.pin_memory` and `unpin_memory`. On unpin, buffers are stored in a size-keyed pool (up to a cap, e.g. 16GB) instead of being destroyed. On pin, a matching buffer is reused when available, avoiding repeated `cudaHostRegister`/`cudaHostUnregister` and reducing stalls.
+
+See [Pin Memory Problem and HSWQ Optimization](docs/pin_memory_optimization.md) for full details, design, and verification.
+
+### HSWQ Batched Detailer (SEGS)
+
+<img src="png/detailersegs.png" alt="HSWQ Batched Detailer (SEGS)" width="400">
+
+A **Detailer (SEGS)**-style node that processes face (or other) segments in **three phases** instead of per-segment encode → sample → decode. This greatly reduces how often VAE and UNet are loaded and unloaded when using Dynamic VRAM Loading.
+
+#### Problem with per-segment processing
+
+Typical DetailerForEach runs, for each segment:
+
+1. VAE encode  
+2. KSampler (UNet)  
+3. VAE decode  
+
+So the pipeline does: VAE load → UNet load → VAE load → UNet load → … With many segments this causes repeated unpin/pin of all layers and heavy use of `cudaHostRegister`/`cudaHostUnregister`, leading to long stalls (especially with CUDAGraphs).
+
+#### What HSWQ Batched Detailer does
+
+- **Phase 1 (VAE)**: Encode all segments → VAE is loaded once.  
+- **Phase 2 (UNet)**: Run KSampler for all encoded latents → UNet is loaded once.  
+- **Phase 3 (VAE)**: Decode all refined latents and paste back → VAE is loaded once.
+
+Model switches drop from **O(3n)** to **O(2)** (one VAE load, one UNet load per run). Input/output (INPUT_TYPES, RETURN_TYPES, etc.) is compatible with the original Detailer (SEGS) interface; behavior for a single segment is unchanged.
+
+**Requirement**: [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack) (or equivalent that provides the DetailerForEach SEGS behavior) is required.
+
+Full explanation, interaction with the Pin Buffer Cache, and design notes: [Pin Memory Problem and HSWQ Optimization](docs/pin_memory_optimization.md).
+
 ### Nunchaku-ussoewwin Z-Image-Turbo DiT Loader
 
 ⚠️ **WARNING**: This is an **unofficial experimental loader** created as a prototype before the release of ComfyUI-Nunchaku 1.1.0. This is the author's personal testing environment. **Do not use this node.**
