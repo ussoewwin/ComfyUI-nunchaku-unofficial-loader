@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 3.1.0
+
+- **Added** two new nodes:
+  - **HSWQ Z Image FP8 E4M3 UNet Loader** — Standard UNet loader for HSWQ Z-Image FP8 E4M3 models; extension also installs a Pin Buffer Cache to reduce `cudaHostRegister`/`cudaHostUnregister` overhead under Dynamic VRAM Loading.
+  - **HSWQ Batched Detailer (SEGS)** — Detailer (SEGS)–style node that runs VAE encode → UNet sample → VAE decode in three phases (all encodes, then all samples, then all decodes) to minimize model switching and improve performance with Dynamic VRAM Loading.
+- See [Release Notes v3.1.0](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.0) for details.
+
 ## Version 3.0.2
 
 - **README**: FP8 (fp8e4m3) and torch.compile subsection updated — purpose (use this node with FP8 and torch.compile together) and patches description.
