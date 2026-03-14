@@ -63,8 +63,6 @@ git clone https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader ~/Comf
 
 Restart ComfyUI to load the nodes.
 
-## Requirements
-
 ## Nodes
 
 ### Checkpoint Loader (SDXL)
