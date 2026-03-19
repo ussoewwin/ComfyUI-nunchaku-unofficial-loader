@@ -1,4 +1,4 @@
-# ComfyUI-HSWQ-and-nunchaku-unofficial-loader
+# ComfyUI-HSWQ-and-unofficial-nunchaku-loader
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/icon.png?v=2" width="128">
