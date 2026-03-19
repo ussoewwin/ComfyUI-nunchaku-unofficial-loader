@@ -5,6 +5,10 @@
 - **Fixed**: Bug fixes and corrections (loader registration, zimage model handling, USDU crop model patch).
 - See [Release Notes v3.1.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.1) for details.
 
+## Version 3.1.2
+
+- **Fixed**: Pin Buffer Cache (monkey-patch for `comfy.pinned_memory.pin_memory` / `unpin_memory`) is now enabled only while running `HSWQ Batched Detailer (SEGS)`. Outside of Detailer SEGS, the extension delegates back to ComfyUI's original pin/unpin behavior to avoid side effects in other nodes/workflows.
+
 ## Version 3.1.0
 
 - **Added** two new nodes:
