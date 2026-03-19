@@ -168,6 +168,9 @@ try:
     _PIN_CACHE_TOTAL = 0
     _MAX_PIN_CACHE_BYTES = 16 * 1024 * 1024 * 1024
     _pin_cache_stats = {"hits": 0, "misses": 0, "evictions": 0, "unpins": 0, "swaps": 0}
+    # This cache is enabled only for the HSWQ Batched Detailer (SEGS) node.
+    # Outside of that node, we delegate to ComfyUI's original pin/unpin to avoid side effects.
+    _pm_mod._hswq_pin_cache_active = False
 
     _orig_pm_pin = _pm_mod.pin_memory
     _orig_pm_unpin = _pm_mod.unpin_memory
@@ -176,6 +179,9 @@ try:
         global _PIN_CACHE_TOTAL
         if module.pin_failed or _cli_args.disable_pinned_memory or _pm_mod.get_pin(module) is not None:
             return
+
+        if not getattr(_pm_mod, "_hswq_pin_cache_active", False):
+            return _orig_pm_pin(module)
 
         size = _mem_mod.vram_aligned_size([module.weight, module.bias])
 
@@ -206,6 +212,10 @@ try:
         global _PIN_CACHE_TOTAL
         if _pm_mod.get_pin(module) is None:
             return 0
+
+        if not getattr(_pm_mod, "_hswq_pin_cache_active", False):
+            return _orig_pm_unpin(module)
+
         pin = module._pin
         size = pin.numel() * pin.element_size()
         del module._pin
