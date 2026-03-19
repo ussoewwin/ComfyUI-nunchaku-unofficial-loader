@@ -127,7 +127,7 @@ line_length = 120
 [tool.comfy]
 PublisherId = "ussoewwin"
 DisplayName = "ComfyUI-HSWQ-and-unofficial-nunchaku-loader"
-Id = "a88e4ec0-69a4-407b-831a-4913cd98f4d1"
+Id = "b4e44881-dc13-4866-89bf-a98096478234"
 Icon = "https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/icon.png"
 
 [tool.doc8]
