@@ -888,14 +888,7 @@ try:
 except Exception as e:
     sdxl_logger.exception(f"[SDXL] Failed to register NunchakuUssoewwinCheckpointLoaderSDXL: {e}")
 
-# Z Image FP8 E4M3 専用 DiT / UNet Loader（HSWQ・Nunchaku 非依存 UNet Loader は直下モジュールから）
-try:
-    from .hswq.zimage_fp8_e4m3_hswq import HSWQZImageFP8E4M3DiTLoader
-    NODE_CLASS_MAPPINGS["HSWQZImageFP8E4M3DiTLoader"] = HSWQZImageFP8E4M3DiTLoader
-    logger.info("Registered HSWQ Z Image FP8 E4M3 DiT Loader (with z_image/FP8/torch.compile compat patches)")
-except (ImportError, ModuleNotFoundError) as e:
-    logger.debug("HSWQ Z Image FP8 E4M3 DiT Loader not registered: %s", e)
-
+# Z Image FP8 E4M3 専用 UNet Loader（DiT Loader は init から除外）
 try:
     from .hswq.zimage_fp8_e4m3_unet import HSWQZImageFP8E4M3UNetLoader
     NODE_CLASS_MAPPINGS["HSWQZImageFP8E4M3UNetLoader"] = HSWQZImageFP8E4M3UNetLoader
