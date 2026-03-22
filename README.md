@@ -108,11 +108,11 @@ ComfyUI node for upscaling images using tile-based image-to-image processing, sp
 - **Purpose:** Use this node with FP8 quantized models (e.g. HSWQ SDXL) and torch.compile together.
 - **Patches:** On load, this extension applies compatibility patches (`usdu_compat_patches.py`) that fix copy_ shape mismatch, FP8 linear/addmm bias–out_features mismatch, control embedder weight layout, and Lumina modulate/apply_gate dimension issues so the node works with FP8 and torch.compile.
 
-### HSWQ Z Image FP8 E4M3 UNet Loader
+### HSWQ FP8 E4M3 UNet Loader
 
-<img src="png/hswqunet.png" alt="HSWQ Z Image FP8 E4M3 UNet Loader" width="400">
+<img src="png/hswqunet.png" alt="HSWQ FP8 E4M3 UNet Loader" width="400">
 
-Standard ComfyUI UNet loader wrapper that loads HSWQ Z-Image FP8 E4M3 diffusion models. When this extension is loaded, it also installs a **Pin Buffer Cache** that patches ComfyUI’s `pin_memory` / `unpin_memory` used by Dynamic VRAM Loading.
+Standard ComfyUI UNet loader wrapper that loads HSWQ FP8 E4M3 diffusion models. When this extension is loaded, it also installs a **Pin Buffer Cache** that patches ComfyUI’s `pin_memory` / `unpin_memory` used by Dynamic VRAM Loading.
 
 #### Why the Pin Buffer Cache matters
 
@@ -120,7 +120,7 @@ With **Dynamic VRAM Loading**, ComfyUI loads each layer on demand (CPU → GPU) 
 
 #### What this loader does
 
-- **Node**: Loads the UNet (MODEL) from HSWQ Z Image FP8 E4M3 checkpoints like the standard UNet loader.
+- **Node**: Loads the UNet (MODEL) from HSWQ FP8 E4M3 checkpoints like the standard UNet loader.
 - **Cache (extension-wide)**: Monkey-patches `comfy.pinned_memory.pin_memory` and `unpin_memory`. On unpin, buffers are stored in a size-keyed pool (up to a cap, e.g. 16GB) instead of being destroyed. On pin, a matching buffer is reused when available, avoiding repeated `cudaHostRegister`/`cudaHostUnregister` and reducing stalls.
 
 ### HSWQ Batched Detailer (SEGS)

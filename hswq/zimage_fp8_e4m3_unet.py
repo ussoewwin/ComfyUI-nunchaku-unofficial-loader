@@ -949,7 +949,7 @@ class ControlNetApplyAdvanced:
         return (out[0], out[1])
 
 
-class HSWQZImageFP8E4M3UNetLoader:
+class HSWQFP8E4M3UNetLoader:
     @classmethod
     def INPUT_TYPES(s):
         return {"required": { "unet_name": (folder_paths.get_filename_list("diffusion_models"), ),
@@ -959,7 +959,7 @@ class HSWQZImageFP8E4M3UNetLoader:
     FUNCTION = "load_unet"
 
     CATEGORY = "advanced/loaders"
-    TITLE = "HSWQ Z Image FP8 E4M3 UNet Loader"
+    TITLE = "HSWQ FP8 E4M3 UNet Loader"
 
     def load_unet(self, unet_name, weight_dtype):
         model_options = {}
@@ -2079,7 +2079,7 @@ NODE_CLASS_MAPPINGS = {
     "LatentCrop": LatentCrop,
     "LoraLoader": LoraLoader,
     "CLIPLoader": CLIPLoader,
-    "HSWQZImageFP8E4M3UNetLoader": HSWQZImageFP8E4M3UNetLoader,
+    "HSWQFP8E4M3UNetLoader": HSWQFP8E4M3UNetLoader,
     "DualCLIPLoader": DualCLIPLoader,
     "CLIPVisionEncode": CLIPVisionEncode,
     "StyleModelApply": StyleModelApply,
@@ -2520,4 +2520,4 @@ async def init_extra_nodes(init_custom_nodes=True, init_api_nodes=True):
         logging.warning("")
 
     return import_failed
-UNETLoader = HSWQZImageFP8E4M3UNetLoader
+UNETLoader = HSWQFP8E4M3UNetLoader
