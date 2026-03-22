@@ -900,11 +900,11 @@ except Exception as e:
 
 # Z Image FP8 E4M3 専用 UNet Loader（DiT Loader は init から除外）
 try:
-    from .hswq.zimage_fp8_e4m3_unet import HSWQZImageFP8E4M3UNetLoader
-    NODE_CLASS_MAPPINGS["HSWQZImageFP8E4M3UNetLoader"] = HSWQZImageFP8E4M3UNetLoader
-    logger.info("Registered HSWQ Z Image FP8 E4M3 UNet Loader (ComfyUI standard UNet loader wrapper)")
+    from .hswq.zimage_fp8_e4m3_unet import HSWQFP8E4M3UNetLoader
+    NODE_CLASS_MAPPINGS["HSWQFP8E4M3UNetLoader"] = HSWQFP8E4M3UNetLoader
+    logger.info("Registered HSWQ FP8 E4M3 UNet Loader (ComfyUI standard UNet loader wrapper)")
 except (ImportError, ModuleNotFoundError) as e:
-    logger.debug("HSWQ Z Image FP8 E4M3 UNet Loader not registered: %s", e)
+    logger.debug("HSWQ FP8 E4M3 UNet Loader not registered: %s", e)
 
 # HSWQ Loader registration
 try:
