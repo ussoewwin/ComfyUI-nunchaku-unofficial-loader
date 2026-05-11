@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 3.1.3
+
+- **Fixed**: Workaround for `RuntimeError` in `NunchakuUltimateSDUpscale` caused by a recent ComfyUI core change that concatenates multi-encoder conditioning along the feature dimension (e.g., 7680 instead of 2560) for Lumina/HunYuan-based models. Added automatic detection and truncation of these embeddings before sampling.
+- See [Technical Release Note: Lumina Conditioning Fix](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/blob/main/md/usdu_lumina_cond_fix.md) for details.
+
 ## Version 3.1.2
 
 - **Fixed**: Pin Buffer Cache (monkey-patch for `comfy.pinned_memory.pin_memory` / `unpin_memory`) is now enabled only while running `HSWQ Batched Detailer (SEGS)`. Outside of Detailer SEGS, the extension delegates back to ComfyUI's original pin/unpin behavior to avoid side effects in other nodes/workflows.
