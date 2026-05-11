@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 3.1.7
+
+- **Fixed**: Critical fix for severe output noise and `RuntimeError` in `NunchakuUltimateSDUpscale` when used with Lumina/HunYuan-DiT architectures. Corrected the conditioning tensor slicing logic to accurately extract T5/LLM features from concatenated tensors.
+- See [Release Notes v3.1.7](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.7) for details.
+
 ## Version 3.1.3
 
 - **Fixed**: Workaround for `RuntimeError` in `NunchakuUltimateSDUpscale` caused by a recent ComfyUI core change that concatenates multi-encoder conditioning along the feature dimension (e.g., 7680 instead of 2560) for Lumina/HunYuan-based models. Added automatic detection and truncation of these embeddings before sampling.
