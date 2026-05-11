@@ -599,9 +599,10 @@ def fix_cond_for_model(model, cond):
     """
     Fix conditioning embedding dimension to match what the model expects.
 
-    ComfyUI core may concatenate multi-encoder conditioning along the feature
-    dimension (e.g. 3x2560=7680 for Lumina/HunYuan models). This function detects
-    that mismatch and truncates the embedding to the expected dimension.
+    ComfyUI core concatenates multi-encoder conditioning along the feature
+    dimension. Since the CLIP encoder outputs are placed at the start, and the
+    LLM/T5 text encoder outputs are placed at the end, we extract the *last* 
+    `expected_dim` features to target the main cap_embedder input.
     """
     expected_dim = _get_model_expected_cond_dim(model)
     if expected_dim is None or expected_dim <= 0:
@@ -611,9 +612,9 @@ def fix_cond_for_model(model, cond):
     for emb, cond_dict in cond:
         if torch.is_tensor(emb) and emb.ndim >= 2:
             actual_dim = emb.shape[-1]
-            if actual_dim != expected_dim and actual_dim % expected_dim == 0:
-                # Truncate to the expected dimension (take the first slice)
-                emb = emb[..., :expected_dim].contiguous()
+            if actual_dim != expected_dim and actual_dim > expected_dim:
+                # Truncate to the expected dimension by taking the last slice
+                emb = emb[..., -expected_dim:].contiguous()
         fixed.append([emb, cond_dict])
     return fixed
 
