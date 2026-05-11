@@ -3,7 +3,7 @@
 ## Version 3.1.3
 
 - **Fixed**: Workaround for `RuntimeError` in `NunchakuUltimateSDUpscale` caused by a recent ComfyUI core change that concatenates multi-encoder conditioning along the feature dimension (e.g., 7680 instead of 2560) for Lumina/HunYuan-based models. Added automatic detection and truncation of these embeddings before sampling.
-- See [Technical Release Note: Lumina Conditioning Fix](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/blob/main/md/usdu_lumina_cond_fix.md) for details.
+- See [Release Notes v3.1.3](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.3) for details.
 
 ## Version 3.1.2
 
