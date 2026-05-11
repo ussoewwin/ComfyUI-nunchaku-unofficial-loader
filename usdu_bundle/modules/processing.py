@@ -4,7 +4,7 @@ import torch
 import math
 from nodes import common_ksampler, VAEEncode, VAEDecode, VAEDecodeTiled
 from comfy_extras.nodes_custom_sampler import SamplerCustom
-from usdu_utils import pil_to_tensor, tensor_to_pil, get_crop_region, expand_crop, crop_cond
+from usdu_utils import pil_to_tensor, tensor_to_pil, get_crop_region, expand_crop, crop_cond, fix_cond_for_model
 from modules import shared
 from tqdm import tqdm
 import comfy.utils as comfy_utils
@@ -236,6 +236,11 @@ def process_images(p: StableDiffusionProcessing) -> Processed:
     # Encode the image
     batched_tiles = torch.cat([pil_to_tensor(tile) for tile in tiles], dim=0)
     (latent,) = p.vae_encoder.encode(p.vae, batched_tiles)
+
+    # Fix conditioning dimension for models that expect a specific feature dim
+    # (e.g. Lumina/HunYuan cap_embedder expects 2560 but ComfyUI may concat to 7680)
+    positive_cropped = fix_cond_for_model(p.model, positive_cropped)
+    negative_cropped = fix_cond_for_model(p.model, negative_cropped)
 
     with crop_model_cond(p.model, crop_region, p.init_size, init_image.size, tile_size) as model:
         # Generate samples

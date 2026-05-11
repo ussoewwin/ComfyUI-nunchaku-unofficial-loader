@@ -555,6 +555,69 @@ def crop_reference_latents(cond_dict, regions, init_size, canvas_size, tile_size
 
 
 
+def _get_model_expected_cond_dim(model):
+    """
+    Try to detect the expected cross-attention conditioning dimension from the model.
+    For Lumina/HunYuan-DiT models, this is the cap_embedder's normalized_shape.
+    Returns the expected dimension or None if not detectable.
+    """
+    try:
+        # Navigate through ModelPatcher -> model -> diffusion_model
+        diffusion_model = None
+        if hasattr(model, 'model') and hasattr(model.model, 'diffusion_model'):
+            diffusion_model = model.model.diffusion_model
+        elif hasattr(model, 'inner_model') and hasattr(model.inner_model, 'model') and hasattr(model.inner_model.model, 'diffusion_model'):
+            diffusion_model = model.inner_model.model.diffusion_model
+
+        if diffusion_model is None:
+            return None
+
+        # Check for Lumina/HunYuan cap_embedder
+        cap_embedder = getattr(diffusion_model, 'cap_embedder', None)
+        if cap_embedder is None:
+            return None
+
+        # cap_embedder is typically a Sequential containing a LayerNorm/RMSNorm + Linear
+        # The first layer's normalized_shape tells us the expected input dimension
+        for module in cap_embedder.modules():
+            ns = getattr(module, 'normalized_shape', None)
+            if ns is not None:
+                if isinstance(ns, (list, tuple)) and len(ns) == 1:
+                    return ns[0]
+                elif isinstance(ns, int):
+                    return ns
+        # Fallback: check the first Linear layer's in_features
+        for module in cap_embedder.modules():
+            if hasattr(module, 'in_features'):
+                return module.in_features
+    except Exception:
+        pass
+    return None
+
+
+def fix_cond_for_model(model, cond):
+    """
+    Fix conditioning embedding dimension to match what the model expects.
+
+    ComfyUI core may concatenate multi-encoder conditioning along the feature
+    dimension (e.g. 3x2560=7680 for Lumina/HunYuan models). This function detects
+    that mismatch and truncates the embedding to the expected dimension.
+    """
+    expected_dim = _get_model_expected_cond_dim(model)
+    if expected_dim is None or expected_dim <= 0:
+        return cond
+
+    fixed = []
+    for emb, cond_dict in cond:
+        if torch.is_tensor(emb) and emb.ndim >= 2:
+            actual_dim = emb.shape[-1]
+            if actual_dim != expected_dim and actual_dim % expected_dim == 0:
+                # Truncate to the expected dimension (take the first slice)
+                emb = emb[..., :expected_dim].contiguous()
+        fixed.append([emb, cond_dict])
+    return fixed
+
+
 def crop_cond(cond, regions, init_size, canvas_size, tile_size, w_pad=0, h_pad=0):
     cropped = []
     for emb, x in cond:
