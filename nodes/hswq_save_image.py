@@ -21,7 +21,7 @@ class NunchakuSaveImage:
                 "images": ("IMAGE", {"tooltip": "The images to save."}),
                 "format": (["PNG", "JPG"], {"default": "PNG", "tooltip": "Output image format."}),
                 "filename_prefix": ("STRING", {"default": "ComfyUI", "tooltip": "The prefix for the file to save."}),
-                "quality": ("INT", {"default": 95, "min": 1, "max": 100, "step": 1, "tooltip": "JPEG quality (ignored for PNG)."}),
+                "quality": ("INT", {"default": 95, "min": 1, "max": 100, "step": 1, "tooltip": "JPEG quality (1-100). Only used when format is JPG; ignored for PNG."}),
             },
             "hidden": {
                 "prompt": "PROMPT",
@@ -36,7 +36,10 @@ class NunchakuSaveImage:
     DESCRIPTION = "Saves the input images to your ComfyUI output directory as PNG or JPG."
     TITLE = "HSWQ Save Image"
 
-    def save_images(self, images, format, filename_prefix="ComfyUI", quality=95, prompt=None, extra_pnginfo=None):
+    def save_images(self, images, format, filename_prefix="ComfyUI", **kwargs):
+        quality = kwargs.get("quality (JPG only)", 95)
+        prompt = kwargs.get("prompt", None)
+        extra_pnginfo = kwargs.get("extra_pnginfo", None)
         format = format.upper()
         if format not in ("PNG", "JPG"):
             raise ValueError(f"Unsupported format: {format}")
