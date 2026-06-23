@@ -62,7 +62,7 @@ class NunchakuSaveImage:
 
             filename_with_batch_num = filename.replace("%batch_num%", str(batch_number))
             ext = ".png" if format == "PNG" else ".jpg"
-            file = f"{filename_with_batch_num}_{counter:05}_.{ext}"
+            file = f"{filename_with_batch_num}_{counter:05}{ext}"
             full_path = os.path.join(full_output_folder, file)
 
             if format == "PNG":
