@@ -106,6 +106,7 @@ def USDU_base_inputs():
         ("negative", ("CONDITIONING", {"tooltip": "The negative conditioning for each tile."})),
         ("vae", ("VAE", {"tooltip": "The VAE model to use for tiles."})),
         ("upscale_by", ("FLOAT", {"default": 2, "min": 0.05, "max": 4, "step": 0.05, "tooltip": "The factor to upscale the image by."})),
+        ("output_format", (["PNG", "JPG"], {"default": "PNG", "tooltip": "Output image format for the saved result."})),
         ("seed", ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "tooltip": "The seed to use for image-to-image."})),
         ("steps", ("INT", {"default": 20, "min": 1, "max": 10000, "step": 1, "tooltip": "The number of steps to use for each tile."})),
         ("cfg", ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "tooltip": "The CFG scale to use for each tile."})),
@@ -183,6 +184,7 @@ class NunchakuUltimateSDUpscale:
                 ("negative", ("CONDITIONING", {"tooltip": "The negative conditioning for each tile."})),
                 ("vae", ("VAE", {"tooltip": "The VAE model to use for tiles."})),
                 ("upscale_by", ("FLOAT", {"default": 2, "min": 0.05, "max": 4, "step": 0.05, "tooltip": "The factor to upscale the image by."})),
+                ("output_format", (["PNG", "JPG"], {"default": "PNG", "tooltip": "Output image format for the saved result."})),
                 ("seed", ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "tooltip": "The seed to use for image-to-image."})),
                 ("steps", ("INT", {"default": 20, "min": 1, "max": 10000, "step": 1, "tooltip": "The number of steps to use for each tile."})),
                 ("cfg", ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "tooltip": "The CFG scale to use for each tile."})),
@@ -213,7 +215,7 @@ class NunchakuUltimateSDUpscale:
     CATEGORY = "image/upscaling"
     OUTPUT_TOOLTIPS = ("The final upscaled image.",)
     DESCRIPTION = "Upscales an image and runs image-to-image on tiles from the input image."
-    TITLE = "HSWQ&Nunchaku Ultimate SD Upscale"
+    TITLE = "HSWQ Ultimate SD Upscale"
 
     def upscale(
         self,
@@ -223,6 +225,7 @@ class NunchakuUltimateSDUpscale:
         negative,
         vae,
         upscale_by,
+        output_format,
         seed,
         steps,
         cfg,
