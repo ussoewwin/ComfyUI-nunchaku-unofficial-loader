@@ -21,7 +21,7 @@ class NunchakuSaveImage:
                 "images": ("IMAGE", {"tooltip": "The images to save."}),
                 "format": (["PNG", "JPG"], {"default": "PNG", "tooltip": "Output image format."}),
                 "filename_prefix": ("STRING", {"default": "ComfyUI", "tooltip": "The prefix for the file to save."}),
-                "quality": ("INT", {"default": 95, "min": 1, "max": 100, "step": 1, "tooltip": "JPEG quality (1-100). Only used when format is JPG; ignored for PNG."}),
+                "quality (JPG only)": ("INT", {"default": 95, "min": 1, "max": 100, "step": 1, "tooltip": "JPEG quality (1-100). Only used when format is JPG; ignored for PNG."}),
             },
             "hidden": {
                 "prompt": "PROMPT",
