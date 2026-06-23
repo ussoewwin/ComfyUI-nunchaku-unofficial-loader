@@ -750,6 +750,14 @@ try:
 except Exception as e:
     logger.error(f"Failed to register Nunchaku Ultimate SD Upscale nodes: {e}", exc_info=True)
 
+try:
+    from .nodes.nunchaku_save_image import NunchakuSaveImage
+
+    NODE_CLASS_MAPPINGS["NunchakuSaveImage"] = NunchakuSaveImage
+    logger.info("Nunchaku Save Image node registered successfully")
+except Exception as e:
+    logger.error(f"Failed to register Nunchaku Save Image node: {e}", exc_info=True)
+
 # SDXL MultiGPU node registration (UNET + CLIP, ref CheckpointLoaderSimple)
 try:
     import folder_paths
