@@ -2,6 +2,8 @@ import logging
 import os
 from pathlib import Path
 
+__version__ = "3.1.8"
+
 import torch
 import yaml
 from packaging.version import InvalidVersion, Version
