@@ -98,6 +98,16 @@ ComfyUI node for upscaling images using tile-based image-to-image processing, sp
 - **Seam Fixing**: Includes multiple seam fixing modes (None, Band Pass, Half Tile, Half Tile + Intersections)
 - **Module Isolation**: Prevents module reference conflicts with other custom nodes
 
+#### Upscale magnification (`upscale_by` / `target_height`)
+
+- **`upscale_by`**: Dropdown with **Auto** or fixed magnification values from **0.05** to **4.00** (step 0.05).
+- **`target_height`**: Target output height in pixels (default **4320**). Used **only when `upscale_by` is Auto**.
+- **Auto mode**: Reads the input image height from the connected `image`, then sets  
+  `scale = target_height / input_height` (clamped to 0.05–4.0).
+- **Fixed magnification**: When you pick a numeric value (e.g. **2.00**), that scale is used directly and **`target_height` is ignored**.
+
+Example: input height 1080, `upscale_by = Auto`, `target_height = 4320` → scale 4.0 → output height 4320.
+
 #### Usage Notes
 
 - **Standalone**: This node does **not** require `ComfyUI_UltimateSDUpscale`. It uses a bundled copy (`usdu_bundle`) and works on its own. You can use this node without installing any other Ultimate SD Upscale extension.
@@ -107,6 +117,25 @@ ComfyUI node for upscaling images using tile-based image-to-image processing, sp
 #### FP8 (fp8e4m3) and torch.compile
 - **Purpose:** Use this node with FP8 quantized models (e.g. HSWQ SDXL) and torch.compile together.
 - **Patches:** On load, this extension applies compatibility patches (`usdu_compat_patches.py`) that fix copy_ shape mismatch, FP8 linear/addmm bias–out_features mismatch, control embedder weight layout, and Lumina modulate/apply_gate dimension issues so the node works with FP8 and torch.compile.
+
+### HSWQ Save Image
+
+<img src="png/saveimage.png" alt="HSWQ Save Image" width="400">
+
+ComfyUI output node that saves images to your ComfyUI **output** folder as **PNG** or **JPG**.
+
+#### Features
+
+- **Format selection**: **PNG** (default) or **JPG**
+- **Filename prefix**: Same behavior as the built-in Save Image node (default `ComfyUI`)
+- **JPEG quality**: **quality (JPG only)** (1–100, default 95); ignored when format is PNG
+- **PNG metadata**: Embeds workflow `prompt` and `extra_pnginfo` in PNG text chunks when available
+
+#### Usage Notes
+
+- **Inputs**: `images` (IMAGE), `format`, `filename_prefix`, `quality (JPG only)`
+- **Category**: `image` (output node; no return socket)
+- **Output path**: Uses ComfyUI's standard output directory via `folder_paths.get_output_directory()`
 
 ### HSWQ FP8 E4M3 UNet Loader
 
