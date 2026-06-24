@@ -86,7 +86,7 @@ ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, w
 
 ### HSWQ&Nunchaku Ultimate SD Upscale
 
-<img src="png/usdu_auto_target.png" alt="HSWQ&Nunchaku Ultimate SD Upscale" width="400">
+<img src="png/usdu_auto_workflow.png" alt="HSWQ&Nunchaku Ultimate SD Upscale" width="400">
 
 ComfyUI node for upscaling images using tile-based image-to-image processing, specifically optimized for Nunchaku SDXL models.
 
