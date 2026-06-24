@@ -68,6 +68,10 @@ def _ensure_imports():
 MAX_RESOLUTION = 8192
 
 
+def _upscale_by_options():
+    return ["Auto"] + [f"{round(i * 0.05, 2):.2f}" for i in range(1, 81)]
+
+
 def _to_fp32_image(image: torch.Tensor) -> torch.Tensor:
     """
     Convert image tensor to FP32 and ensure proper color range for Nunchaku SDXL.
@@ -105,7 +109,8 @@ def USDU_base_inputs():
         ("positive", ("CONDITIONING", {"tooltip": "The positive conditioning for each tile."})),
         ("negative", ("CONDITIONING", {"tooltip": "The negative conditioning for each tile."})),
         ("vae", ("VAE", {"tooltip": "The VAE model to use for tiles."})),
-        ("upscale_by", ("FLOAT", {"default": 2, "min": 0.05, "max": 4, "step": 0.05, "tooltip": "The factor to upscale the image by."})),
+        ("upscale_by", (_upscale_by_options(), {"default": "Auto", "tooltip": "Choose 'Auto' to calculate the scale from target vertical pixels, or select a fixed magnification."})),
+        ("target_height", ("INT", {"default": 4320, "min": 64, "max": MAX_RESOLUTION, "step": 8, "tooltip": "Target output height in pixels. Used only when upscale_by is 'Auto'."})),
         ("seed", ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "tooltip": "The seed to use for image-to-image."})),
         ("steps", ("INT", {"default": 20, "min": 1, "max": 10000, "step": 1, "tooltip": "The number of steps to use for each tile."})),
         ("cfg", ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "tooltip": "The CFG scale to use for each tile."})),
@@ -182,7 +187,8 @@ class NunchakuUltimateSDUpscale:
                 ("positive", ("CONDITIONING", {"tooltip": "The positive conditioning for each tile."})),
                 ("negative", ("CONDITIONING", {"tooltip": "The negative conditioning for each tile."})),
                 ("vae", ("VAE", {"tooltip": "The VAE model to use for tiles."})),
-                ("upscale_by", ("FLOAT", {"default": 2, "min": 0.05, "max": 4, "step": 0.05, "tooltip": "The factor to upscale the image by."})),
+                ("upscale_by", (_upscale_by_options(), {"default": "Auto", "tooltip": "Choose 'Auto' to calculate the scale from target vertical pixels, or select a fixed magnification."})),
+                ("target_height", ("INT", {"default": 4320, "min": 64, "max": MAX_RESOLUTION, "step": 8, "tooltip": "Target output height in pixels. Used only when upscale_by is 'Auto'."})),
                 ("seed", ("INT", {"default": 0, "min": 0, "max": 0xFFFFFFFFFFFFFFFF, "tooltip": "The seed to use for image-to-image."})),
                 ("steps", ("INT", {"default": 20, "min": 1, "max": 10000, "step": 1, "tooltip": "The number of steps to use for each tile."})),
                 ("cfg", ("FLOAT", {"default": 8.0, "min": 0.0, "max": 100.0, "tooltip": "The CFG scale to use for each tile."})),
@@ -223,6 +229,7 @@ class NunchakuUltimateSDUpscale:
         negative,
         vae,
         upscale_by,
+        target_height,
         seed,
         steps,
         cfg,
@@ -247,6 +254,18 @@ class NunchakuUltimateSDUpscale:
         custom_sigmas=None,
     ):
         _ensure_imports()
+
+        # Normalize color range first to get correct input dimensions
+        image = _to_fp32_image(image)
+        init_img = tensor_to_pil(image, 0)
+
+        # Resolve upscale_by: explicit numeric value takes precedence over Auto
+        if upscale_by == "Auto":
+            scale = float(target_height) / float(init_img.height)
+        else:
+            scale = float(upscale_by)
+        scale = max(0.05, min(4.0, scale))
+
         # Store params
         self.tile_width = tile_width
         self.tile_height = tile_height
@@ -257,7 +276,7 @@ class NunchakuUltimateSDUpscale:
         self.seam_fix_padding = seam_fix_padding
         self.seam_fix_mode = seam_fix_mode
         self.mode_type = mode_type
-        self.upscale_by = upscale_by
+        self.upscale_by = scale
         self.seam_fix_mask_blur = seam_fix_mask_blur
 
         #
@@ -267,9 +286,6 @@ class NunchakuUltimateSDUpscale:
         # Upscaler
         shared.sd_upscalers[0] = UpscalerData()
         shared.actual_upscaler = upscale_model
-
-        # Normalize color range for Nunchaku SDXL VAE output before processing
-        image = _to_fp32_image(image)
 
         # Set the batch of images
         shared.batch = [tensor_to_pil(image, i) for i in range(len(image))]
@@ -289,7 +305,7 @@ class NunchakuUltimateSDUpscale:
             sampler_name,
             scheduler,
             denoise,
-            upscale_by,
+            scale,
             force_uniform_tiles,
             tiled_decode,
             tile_width,
