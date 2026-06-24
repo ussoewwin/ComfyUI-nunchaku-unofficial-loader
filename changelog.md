@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 3.1.8
+
+- **Added**: **HSWQ Save Image** (`NunchakuSaveImage`) — save `IMAGE` output as PNG or JPG (JPEG quality when JPG is selected).
+- **Added**: **Nunchaku Ultimate SD Upscale** — `upscale_by` dropdown with **Auto** mode and `target_height` (default 4320) to derive scale from input height; fixed magnifications 0.05–4.00 remain available.
+- See [Release Notes v3.1.8](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.8) for details.
+
 ## Version 3.1.7
 
 - **Fixed**: Critical fix for severe output noise and `RuntimeError` in `NunchakuUltimateSDUpscale` when used with Lumina/HunYuan-DiT architectures. Corrected the conditioning tensor slicing logic to accurately extract T5/LLM features from concatenated tensors.
