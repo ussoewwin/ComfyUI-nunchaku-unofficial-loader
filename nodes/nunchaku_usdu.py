@@ -260,11 +260,22 @@ class NunchakuUltimateSDUpscale:
         init_img = tensor_to_pil(image, 0)
 
         # Resolve upscale_by: explicit numeric value takes precedence over Auto
+        init_w = float(init_img.width)
+        init_h = float(init_img.height)
         if upscale_by == "Auto":
-            scale = float(target_height) / float(init_img.height)
+            # Honor target_height: no 4.0 combo cap (fixed modes still cap at 4.0).
+            scale = float(target_height) / init_h
+            max_scale = min(MAX_RESOLUTION / init_w, MAX_RESOLUTION / init_h)
+            if scale > max_scale:
+                logger.warning(
+                    "Auto upscale: target_height=%d needs scale %.3f but max is %.3f "
+                    "(capped by MAX_RESOLUTION=%d).",
+                    target_height, scale, max_scale, MAX_RESOLUTION,
+                )
+            scale = max(0.05, min(scale, max_scale))
         else:
             scale = float(upscale_by)
-        scale = max(0.05, min(4.0, scale))
+            scale = max(0.05, min(4.0, scale))
 
         # Store params
         self.tile_width = tile_width
