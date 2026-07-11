@@ -639,7 +639,16 @@ class HSWQBatchedDetailer:
 
         logger.info("[HSWQ BatchedDetailer] Phase 3 complete: all segments decoded and pasted")
 
-        image_tensor = utils.tensor_convert_rgb(image)
+        # Impact Pack utils.tensor_convert_rgb(..., prefer_copy=True) calls
+        # ndarray.copy() on the RGBA→RGB path, which raises on torch.Tensor
+        # ("'Tensor' object has no attribute 'copy'"). Keep torch-safe conversion.
+        n_ch = int(image.shape[-1])
+        if n_ch == 3:
+            image_tensor = image
+        elif n_ch == 4:
+            image_tensor = image[..., :3].contiguous().clone()
+        else:
+            image_tensor = utils.tensor_convert_rgb(image, prefer_copy=False)
 
         cropped_list.sort(key=lambda x: x.shape, reverse=True)
         enhanced_list.sort(key=lambda x: x.shape, reverse=True)
