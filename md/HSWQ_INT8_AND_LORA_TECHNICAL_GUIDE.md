@@ -1,115 +1,116 @@
-# HSWQ INT8（comfy_quant）対応・LoRA 対応 — 完全技術解説書
+# HSWQ INT8 (comfy_quant) and LoRA Support — Technical Implementation Manual
 
-記録日: 2026-07-12  
-リポジトリ: `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
-反映コミット: `516ac28`（`feat: native comfy_quant INT8 load, LoRA bake Status, fix Dynamic VBAR OOM`）  
-バージョン表記: `3.1.8`（本変更では bump / tag / GitHub Release なし）
+Date of record: 2026-07-12  
+Repository: `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
+Feature commit: `516ac28` — `feat: native comfy_quant INT8 load, LoRA bake Status, fix Dynamic VBAR OOM`  
+Package version at time of record: `3.1.8` (no version bump / tag / GitHub Release for this change)
 
-本文書は、ご主人様のご命令どおり次の四点を満たす。
+This document describes the **native comfy_quant INT8** load path and **INT8-safe LoRA** bake / Status logging added to this extension. It is organized as:
 
-1. **実施した概要**
-2. **追加・修正したファイル名**
-3. **追加・修正したコードの全文**
-4. **その意味**
+1. **Summary** — what was implemented and why
+2. **Files created or modified**
+3. **Full source** of those files (as on disk after `516ac28`)
+4. **Technical meaning** — per-module / per-hook behavior
 
----
-
-## ① 実施した概要
-
-### 1.1 目的
-
-ComfyUI 本体を改変せず、拡張 `ComfyUI-nunchaku-unofficial-loader` 側のモンキーパッチだけで次を実現した。
-
-| 柱 | 内容 |
-|----|------|
-| **A. Native comfy_quant INT8 ロード** | `int8_tensorwise` / `.comfy_quant` 付き SD UNet チェックポイントを、本体 `MixedPrecisionOps` 経路で読めるようにする（特に **Conv2d**）。 |
-| **B. INT8 上での LoRA** | 任意の LoRA ローダが通る共通経路にフックし、**lora名 / 適用キー数 / スキップキー数** を Status ログで出し、Dynamic VRAM でも **dequant → bake → requant** で焼き込む。 |
-| **C. FaceDetailer 二回目の VBAR OOM 修正** | bake 後に `module._v` を消すと bump allocator が再 `alloc` して OOM する。`_v` を残し、baked キーの LowVramPatch を剥がす。 |
-
-### 1.2 なぜ本体パッチでは足りないか
-
-ComfyUI 本体の `MixedPrecisionOps` は主に **Linear / Embedding / MoE** の量子化ロードを想定している。SD UNet の INT8（comfy_quant）は **Conv2d の weight が int8 + `.comfy_quant` マーカー**として入る。ここを本体だけに任せると次が起きる。
-
-- `Only Tensors of floating point and complex dtype can require gradients`（int8 Parameter 扱い失敗）
-- Conv 層に `set_weight` / `convert_weight` が無く、LoRA が **int8 への丸め**に落ちてデルタが消える
-
-よって拡張側で次を注入する。
-
-1. `convert_old_quants` — comfy_quant JSON の正規化（二重エンコード・裸文字列）
-2. `MixedPrecisionOps.Conv2d` — Linear と同型の量子化 Conv2d（`set_weight` / `convert_weight` 付き）
-3. LoRA 名キャプチャ（folder_paths / load_torch_file / LoraLoader / stack）
-4. `load_lora` / `load_lora_for_models` — 適用・スキップ集計
-5. `ModelPatcherDynamic.load` — Dynamic VRAM 後の INT8 bake + VBAR 安全策
-6. `LowVramPatch.__call__` — int8 中間 dtype の回避
-
-### 1.3 ロード入口（ユーザーが触るノード）
-
-| ノード / API | 挙動 |
-|--------------|------|
-| **HSWQLoader**（`nodes/hswq_loader_node.py`） | パスを `checkpoint_looks_like_comfy_quant_int8` で判定。INT8 なら `load_checkpoint_guess_config`（本体 MixedPrecisionOps）。FP8 Scaled なら従来の `.scale` 逆量子化経路。 |
-| **HSWQFP8E4M3UNetLoader**（`hswq/zimage_fp8_e4m3_unet.py`） | `weight_dtype` に `int8_tensorwise` を追加。自動検出または明示指定で INT8。INT8 weight に float8 強制をしない。 |
-
-INT8 ロード直後: `reset_int8_lora_log_counters()` → `summarize_int8_lora_capability(model)`（Linear/Conv2d の set/convert 準備状況をコンソールへ）。
-
-### 1.4 LoRA Status の仕様（ご要求どおり）
-
-1 スロットあたりの必須表示:
-
-- `lora名=` … 実ファイル名（アダプタ型名 `"lora"` ではない）
-- `適用キー数=` … unet + clip（内訳付き）
-- `スキップキー数=` … `not_mapped` + `mapped_but_not_attached`
-
-スタイルは `ComfyUI-QwenImageLoraLoader` の Status 行に寄せ、**特定 LoRA ノードへの依存はしない**（共通フックのみ）。
-
-### 1.5 Dynamic bake と VBAR（致命バグの修正）
-
-**症状:** 一回目生成は成功、Impact FaceDetailer 等で二回目 `ModelPatcherDynamic.load` すると `MemoryError: VBAR OOM`。
-
-**原因:** bake 後に `module._v` を unpin/delete していた。`ModelVBAR.alloc` は offset が増えるだけの bump allocator。次 load で `_v` が無い → 再 `alloc` → OOM。
-
-**修正（`_DYN_VER = 4`）:**
-
-- bake 後も **`_v` を消さない**
-- bake 済みキーを `patcher.patches` から pop
-- 焼き込み前の `backup` を落とし、`restore_loaded_backups` が bake を巻き戻さないようにする
-- `model._hswq_int8_baked_keys` + `_hswq_int8_baked_uuid` で追跡。新 LoRA（uuid 変更）で invalidate
-- 毎回 load 後 `_strip_lowvram_for_baked_keys`（クローンで二重適用防止）
-
-### 1.6 起動時配線
-
-`__init__.py` import 時に `apply_comfy_quant_int8_patches()` を呼ぶ。失敗しても他ノード登録は継続（`logger.debug`）。
-
-### 1.7 既知の限界
-
-- Status はフックが発火したローダに依存する。極端に独自経路だけのカスタムノードは名前が `unknown_lora#N` になり得る。
-- パッチ版番号（`_DYN_VER` 等）を上げたあとは **ComfyUI 再起動**が必要（ホットリロードで古いラッパが残る）。
-- bake 後も `_v` は残るが、該当キーの LowVramPatch はクリア済み。焼き込み済み weight は Parameter 上に残る。
+Style matches other public manuals under `md/` (for example `HSWQ_SAVE_IMAGE_AND_USDU_AUTO_IMPLEMENTATION.md`).
 
 ---
 
-## ② 追加・修正したファイル名
+## 1. Summary
 
-コミット `516ac28` の対象（5 ファイル、`__pycache__` は対象外）:
+### 1.1 Goals
 
-| 種別 | パス | 行数目安（コミット差分） |
-|------|------|--------------------------|
-| **新規** | `patches/comfy_quant_int8.py` | +1455（実装本体） |
-| **修正** | `__init__.py` | パッチ適用呼び出し + ログ文言 |
-| **修正** | `nodes/hswq_loader_node.py` | INT8 自動判定ロード経路、タイトル |
-| **修正** | `hswq/zimage_fp8_e4m3_unet.py` | `int8_tensorwise` / INT8 UNet 経路 |
-| **修正** | `patches/zimage_fp8_torchcompile.py` | shape skip → `record_lora_shape_skip` |
+Implement the following **without editing ComfyUI core**, using monkey-patches inside `ComfyUI-nunchaku-unofficial-loader` only:
 
-変更統計: `5 files changed, 1574 insertions(+), 50 deletions(-)`
+| Pillar | Description |
+|--------|-------------|
+| **A. Native comfy_quant INT8 load** | Load SD UNet checkpoints that use `int8_tensorwise` / `.comfy_quant` through ComfyUI `MixedPrecisionOps`, including **Conv2d**. |
+| **B. LoRA on INT8** | Hook common LoRA load paths (loader-agnostic), emit Status lines with filename / applied key count / skip key count, and **dequant → bake → requant** under Dynamic VRAM. |
+| **C. Second-generation VBAR OOM fix** | Deleting `module._v` after bake caused bump-allocator re-`alloc` on the next `ModelPatcherDynamic.load` (e.g. Impact FaceDetailer). Keep `_v`; clear LowVramPatch for baked keys. |
+
+### 1.2 Why core-only MixedPrecisionOps is insufficient
+
+Upstream `MixedPrecisionOps` focuses on **Linear / Embedding / MoE**. SD UNet INT8 (comfy_quant) stores **Conv2d weights as int8 + `.comfy_quant` markers**. Without extension-side support:
+
+- `Only Tensors of floating point and complex dtype can require gradients` (int8 treated as a normal Parameter)
+- Conv layers lack `set_weight` / `convert_weight`, so LoRA falls back to **rounding into int8** and the delta is destroyed
+
+This extension therefore injects:
+
+1. `convert_old_quants` — normalize comfy_quant JSON (double-encoding, bare format strings)
+2. `MixedPrecisionOps.Conv2d` — quantized Conv2d with `set_weight` / `convert_weight` (same idea as Linear)
+3. LoRA filename capture (`folder_paths` / `load_torch_file` / `LoraLoader` / stack locals)
+4. `load_lora` / `load_lora_for_models` — applied / skipped key accounting
+5. `ModelPatcherDynamic.load` — INT8 bake after Dynamic VRAM load + VBAR-safe policy
+6. `LowVramPatch.__call__` — avoid non-floating intermediate dtype on INT8 weights
+
+### 1.3 User-facing load entry points
+
+| Node / API | Behavior |
+|------------|----------|
+| **HSWQLoader** (`nodes/hswq_loader_node.py`) | Probe path with `checkpoint_looks_like_comfy_quant_int8`. INT8 → `load_checkpoint_guess_config` (patched MixedPrecisionOps). Otherwise legacy Scaled FP8 `.scale` dequant path. |
+| **HSWQFP8E4M3UNetLoader** (`hswq/zimage_fp8_e4m3_unet.py`) | Adds `int8_tensorwise` to `weight_dtype`. Auto-detect or explicit dtype; does not force float8 over int8 weights. |
+
+After a successful INT8 load: `reset_int8_lora_log_counters()` then `summarize_int8_lora_capability(model)` (Linear/Conv2d set/convert readiness on the console).
+
+### 1.4 LoRA Status line contract
+
+Per slot, Status lines always include:
+
+- `lora名=` — real filename (not adapter type string `"lora"`)
+- `適用キー数=` — unet + clip (with breakdown)
+- `スキップキー数=` — `not_mapped` + `mapped_but_not_attached`
+
+(The Japanese field labels are intentional console keys, aligned with the Status style used by `ComfyUI-QwenImageLoraLoader`.) Hooks target **shared ComfyUI paths**, not one specific custom LoRA node.
+
+### 1.5 Dynamic bake and VBAR (critical fix)
+
+**Symptom:** First generation works; second `ModelPatcherDynamic.load` (e.g. FaceDetailer) raises `MemoryError: VBAR OOM`.
+
+**Cause:** Bake previously unpinned/deleted `module._v`. `ModelVBAR.alloc` is a bump allocator (offset only grows). Next load without `_v` calls `alloc()` again → OOM.
+
+**Fix (`_DYN_VER = 4`):**
+
+- Do **not** delete `_v` after bake
+- Pop baked keys from `patcher.patches`
+- Drop pre-bake `backup` entries so `restore_loaded_backups` does not undo bake
+- Track `model._hswq_int8_baked_keys` + `_hswq_int8_baked_uuid` (`patches_uuid`); invalidate when a new LoRA uuid appears
+- Call `_strip_lowvram_for_baked_keys` after every Dynamic.load (prevents double-apply on clones)
+
+### 1.6 Startup wiring
+
+`__init__.py` calls `apply_comfy_quant_int8_patches()` at import time. Failures are logged at debug level so other node registrations continue.
+
+### 1.7 Known limitations
+
+- Status depends on hooks firing. Unusual loaders that never touch `loras` folder paths / `load_lora_for_models` may show `unknown_lora#N`.
+- After raising patch version constants (`_DYN_VER`, etc.), **restart ComfyUI** (stale wrappers can remain under hot reload).
+- `_v` remains after bake; LowVramPatch for those keys is cleared. Baked weights live on Parameters.
 
 ---
 
-## ③ 追加・修正したコードの全文
+## 2. Files Created or Modified
 
-以下はディスク上の **現行全文**（コミット `516ac28` 反映後）。  
-新規ファイルはファイル全体。修正ファイルも「どの行がどう変わったか」を欠かさないため **ファイル全文**を収録する（差分だけだと前後文脈が欠けるため）。
+Commit `516ac28` touched **5 source files** (`__pycache__` excluded):
+
+| Kind | Path | Notes (diff scale) |
+|------|------|--------------------|
+| **Created** | `patches/comfy_quant_int8.py` | +1455 — main implementation |
+| **Modified** | `__init__.py` | Apply patches on import; FP8/INT8 log text |
+| **Modified** | `nodes/hswq_loader_node.py` | INT8 auto-detect load path; UI title |
+| **Modified** | `hswq/zimage_fp8_e4m3_unet.py` | `int8_tensorwise` / INT8 UNet path |
+| **Modified** | `patches/zimage_fp8_torchcompile.py` | shape skip → `record_lora_shape_skip` |
+
+Diffstat: `5 files changed, 1574 insertions(+), 50 deletions(-)`
+
+---
+
+## 3. Full Source (as on disk after `516ac28`)
+
+The sections below embed the **complete current file text** for each path above. New files are included in full. Modified files are also included in full so line-level context is not lost (a patch-only appendix would omit surrounding code).
 
 
-### 3.1 `patches/comfy_quant_int8.py`（全文・1455 行）
+### 3.1 `patches/comfy_quant_int8.py` (full file, 1455 lines)
 
 ```python
 """
@@ -1569,7 +1570,7 @@ def apply_comfy_quant_int8_patches() -> bool:
     return False
 ```
 
-### 3.2 `__init__.py`（全文・946 行）
+### 3.2 `__init__.py` (full file, 946 lines)
 
 ```python
 import logging
@@ -2520,7 +2521,7 @@ __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 logger.info("=" * (80 + len(" ComfyUI-nunchaku Initialization ")))
 ```
 
-### 3.3 `nodes/hswq_loader_node.py`（全文・441 行）
+### 3.3 `nodes/hswq_loader_node.py` (full file, 441 lines)
 
 ```python
 import torch
@@ -2966,7 +2967,7 @@ class HSWQLoader:
         return (model, clip, vae)
 ```
 
-### 3.4 `hswq/zimage_fp8_e4m3_unet.py`（全文・2545 行）
+### 3.4 `hswq/zimage_fp8_e4m3_unet.py` (full file, 2545 lines)
 
 ```python
 from __future__ import annotations
@@ -5516,7 +5517,7 @@ async def init_extra_nodes(init_custom_nodes=True, init_api_nodes=True):
 UNETLoader = HSWQFP8E4M3UNetLoader
 ```
 
-### 3.5 `patches/zimage_fp8_torchcompile.py`（全文・247 行）
+### 3.5 `patches/zimage_fp8_torchcompile.py` (full file, 247 lines)
 
 ```python
 """
@@ -5770,153 +5771,153 @@ def apply_zimage_fp8_torchcompile_patches() -> bool:
 
 ---
 
-## ④ その意味（モジュール／関数単位の技術解説）
+## 4. Technical Meaning (per module / hook)
 
-### 4.1 `patches/comfy_quant_int8.py` — 全体の役割
+### 4.1 `patches/comfy_quant_int8.py` — role
 
-拡張の **INT8 + LoRA 実装の単一入口**。ComfyUI コアを書き換えず、import 時に `apply_comfy_quant_int8_patches()` で既存モジュールの関数を差し替える。
+Single entry point for **INT8 + LoRA** behavior in this extension. Does not edit ComfyUI core files; at import time `apply_comfy_quant_int8_patches()` replaces selected functions on already-imported modules.
 
-#### 4.1.1 ログ／状態グローバル
+#### 4.1.1 Logging / state globals
 
-| 名前 | 意味 |
-|------|------|
-| `_lora_attach_last` / `_lora_attach_history` | 直近およびスタックされた LoRA ごとの適用・スキップ集計 |
-| `_lora_bake_by_key` | キー → `"requant"` または `"int8_round"` |
-| `_current_lora_name` 他 | いまアタッチ中のファイル名・strength |
-| `_ADAPTER_TYPE_NAMES` | `"lora"` 等をファイル名と誤認しないための拒否集合 |
+| Name | Meaning |
+|------|---------|
+| `_lora_attach_last` / `_lora_attach_history` | Per-LoRA applied/skip accounting (latest + stacked loaders) |
+| `_lora_bake_by_key` | key → `"requant"` or `"int8_round"` |
+| `_current_lora_name` (and strengths) | Filename / strengths for the LoRA currently being attached |
+| `_ADAPTER_TYPE_NAMES` | Reject adapter type strings such as `"lora"` that are not filenames |
 
-`_lora_line` は **print のみ**（print + logger の二重出力を避ける）。Status 本体はこれで出す。
+`_lora_line` uses **print only** (avoids duplicate print+logger lines). Status output goes through this helper.
 
 #### 4.1.2 `decode_comfy_quant_conf` / `checkpoint_looks_like_comfy_quant_int8`
 
-- マーカーが tensor/bytes/str/二重 JSON でも dict に落とす。
-- パス指定時は safetensors を軽く開き、`int8_tensorwise` または int8 weight + comfy_quant を検出。フルロード前に HSWQLoader が分岐できる。
+- Accept tensor / bytes / str / double-encoded JSON and normalize to a dict.
+- Path mode opens safetensors lightly and looks for `int8_tensorwise` or int8 weights + comfy_quant so HSWQLoader can branch before a full load.
 
 #### 4.1.3 `_patch_convert_old_quants`
 
-本体 `convert_old_quants` の前後で metadata `layers` の裸文字列を `{"format": ...}` に直し、`.comfy_quant` テンソルを正規化。エクスポータ差で落ちるロードを防ぐ。
+Around upstream `convert_old_quants`, rewrite bare metadata `layers` strings to `{"format": ...}` and normalize `.comfy_quant` tensors so exporter differences do not break load.
 
 #### 4.1.4 `_make_quantized_conv2d` / MixedPrecisionOps.Conv2d
 
-Linear 側と同じ思想:
+Same pattern as quantized Linear:
 
 - `_load_from_state_dict` → `_load_quantized_module`
-- `convert_weight` — 量子化 weight を計算用 float に戻す（LoRA 加算の前）
-- `set_weight` — bake 後に再量子化して戻す（**requant 経路**）
+- `convert_weight` — dequant to compute dtype before LoRA math
+- `set_weight` — requant after bake (**requant path**)
 
-これがないと ModelPatcher は int8 に直接丸め、**Conv 上の LoRA が死ぬ**。
+Without these, ModelPatcher rounds into int8 and **Conv LoRA deltas die**.
 
-#### 4.1.5 LoRA 名キャプチャ（ノード非依存）
+#### 4.1.5 LoRA filename capture (loader-agnostic)
 
-| フック | 狙い |
-|--------|------|
-| `folder_paths.get_full_path(_or_raise)` folder=`loras` | UI 相対名 |
-| `comfy.utils.load_torch_file`（loras 配下） | フルパスから basename |
-| `nodes.LoraLoader.load_lora` | 標準ノード |
-| `inspect.stack` ローカル探索 | Power LoRA / 辞書ウィジェット等 |
+| Hook | Purpose |
+|------|---------|
+| `folder_paths.get_full_path(_or_raise)` with folder `loras` | UI-relative name |
+| `comfy.utils.load_torch_file` under loras dirs | basename from full path |
+| `nodes.LoraLoader.load_lora` | stock node |
+| `inspect.stack` local scan | Power LoRA / dict widgets, etc. |
 
-`_looks_like_lora_filename` でアダプタ型名を弾く（かつての `lora名=lora` バグ対策）。
+`_looks_like_lora_filename` rejects adapter type names (fixes the old `lora名=lora` bug).
 
 #### 4.1.6 `_patch_load_lora_key_counts`
 
-`comfy.lora.load_lora` と `comfy.sd.load_lora_for_models` をラップし、
+Wraps `comfy.lora.load_lora` and `comfy.sd.load_lora_for_models` to record:
 
-- ファイルキー数、マップ数
-- unet/clip 適用キー
+- file key count, mapped count
+- unet / clip applied keys
 - `not_mapped` / `mapped_but_not_attached`
 
-を履歴に積み、`_log_lora_slot_attach` で即 Status 1 行を出す。
+Then `_log_lora_slot_attach` emits one Status line immediately.
 
-#### 4.1.7 Dynamic bake（`_bake_int8_patches_on_dynamic_patcher`）
+#### 4.1.7 Dynamic bake (`_bake_int8_patches_on_dynamic_patcher`)
 
-Dynamic VRAM では LoRA が `LowVramPatch` のまま残り、INT8 `set_weight` が走らず「キー数は付いたが見た目に効かない」ことがある。`ModelPatcherDynamic.load` の直後に:
+Under Dynamic VRAM, LoRA often remains as `LowVramPatch`, so INT8 `set_weight` never runs (“keys counted, no visual effect”). After `ModelPatcherDynamic.load`:
 
-1. baked 済みキーの LowVram を剥がす
-2. `set_func` があるキーだけ `patch_weight_to_device`（requant）
-3. `_v` は消さない（VBAR OOM 防止）
-4. `patches` / 該当 `backup` を整理
+1. Strip LowVramPatch for already-baked keys
+2. `patch_weight_to_device` only where `set_func` exists (requant)
+3. Keep `_v` (VBAR OOM prevention)
+4. Clean `patches` / matching `backup` entries
 
-`dump_int8_lora_bake_stats` で bake サマリ（OK_requant / BROKEN_int8_round 等）。
+`dump_int8_lora_bake_stats` prints bake summary (`OK_requant` / `BROKEN_int8_round`, etc.).
 
 #### 4.1.8 `summarize_int8_lora_capability`
 
-ロード直後に diffusion_model を走査し、Linear/Conv2d の `set_weight`/`convert_weight` 有無を報告。Conv 欠落時は WARN。
+After load, scan `diffusion_model` for Linear/Conv2d `set_weight` / `convert_weight` coverage. WARN if Conv hooks are missing.
 
-### 4.2 `__init__.py` — 意味
+### 4.2 `__init__.py`
 
-拡張ロード時に必ず INT8 パッチを適用する。失敗しても import 全体は落とさない（他ノードを生かす）。HSWQLoader 登録ログを「FP8/INT8」に更新し、ユーザーに両対応であることを示す。
+Always apply INT8 patches when the extension loads. Do not abort the whole import on failure (other nodes must still register). HSWQLoader registration log text mentions FP8/INT8.
 
-### 4.3 `nodes/hswq_loader_node.py` — 意味
+### 4.3 `nodes/hswq_loader_node.py`
 
-従来の Scaled FP8（`.weight` + `.scale`）専用だった HSWQLoader に、
+HSWQLoader previously assumed Scaled FP8 (`.weight` + `.scale`). It now:
 
-1. safetensors プローブで INT8 comfy_quant を検出
-2. 検出時は本体 `load_checkpoint_guess_config`（パッチ済み MixedPrecisionOps）
-3. 非 INT8 は従来 FP8 経路
+1. Probes safetensors for INT8 comfy_quant
+2. On hit, uses `load_checkpoint_guess_config` (patched MixedPrecisionOps)
+3. Otherwise keeps the legacy FP8 path
 
-という分岐を入れた。タイトルを `HSWQ FP8/INT8 Loader (VRAM Opt)` にし、UI 上でも両対応と分かるようにした。INT8 成功時は LoRA カウンタ reset + capability summary。
+UI title: `HSWQ FP8/INT8 Loader (VRAM Opt)`. On INT8 success: reset LoRA counters + capability summary.
 
-### 4.4 `hswq/zimage_fp8_e4m3_unet.py` — 意味
+### 4.4 `hswq/zimage_fp8_e4m3_unet.py`
 
-UNet 専用ローダ側でも同じ INT8 を使えるようにする。
+UNet-only loader entry for the same INT8 capability:
 
-- `weight_dtype` 選択肢に `int8_tensorwise`
-- 自動検出または明示 dtype で INT8 経路
-- INT8 テンソルに float8 を強制しない（破壊防止）
+- `weight_dtype` includes `int8_tensorwise`
+- Auto-detect or explicit dtype selects the INT8 path
+- Does not force float8 onto int8 tensors
 
-HSWQLoader と役割が重なるが、ワークフローで UNet 単体ロードを使う場合の入口。
+Overlaps HSWQLoader for workflows that load UNet alone.
 
-### 4.5 `patches/zimage_fp8_torchcompile.py` — 意味
+### 4.5 `patches/zimage_fp8_torchcompile.py`
 
-LoRA 適用時の shape/numel 不一致スキップを、`record_lora_shape_skip(lora_name, key, reason)` に流す。Status の `shape_skip` 集計と bake サマリに載せるため。スキップを黙殺すると「適用キー数」と実効のズレが追えない。
+Shape / numel mismatch skips during LoRA attach call `record_lora_shape_skip(lora_name, key, reason)` so Status / bake summary can report `shape_skip`. Silent skips make applied-key counts diverge from effective behavior.
 
 ---
 
-## 付録 A — 処理フロー（ロード）
+## Appendix A — Load flow
 
 ```
-チェックポイント選択
+checkpoint selected
     │
     ├─ probe: int8_tensorwise / comfy_quant ?
     │         YES → load_checkpoint_guess_config
-    │               └─ convert_old_quants（正規化）
-    │               └─ MixedPrecisionOps.Linear + 注入 Conv2d
+    │               └─ convert_old_quants (normalize)
+    │               └─ MixedPrecisionOps.Linear + injected Conv2d
     │               └─ summarize_int8_lora_capability
     │
-    └─ NO  → 従来 Scaled FP8（.scale dequant）経路
+    └─ NO  → legacy Scaled FP8 (.scale dequant) path
 ```
 
-## 付録 B — 処理フロー（LoRA）
+## Appendix B — LoRA flow
 
 ```
-任意 LoRA ノード
+any LoRA loader node
     │
-    ├─ folder_paths / load_torch_file / LoraLoader → ファイル名キャプチャ
-    ├─ load_lora_for_models → 適用/スキップ集計 → Status（attach）
-    └─ サンプリング時 ModelPatcherDynamic.load
+    ├─ folder_paths / load_torch_file / LoraLoader → capture filename
+    ├─ load_lora_for_models → applied/skip counts → Status (attach)
+    └─ sampling: ModelPatcherDynamic.load
           ├─ _strip_lowvram_for_baked_keys
-          ├─ _bake_int8_patches_on_dynamic_patcher（_v 保持）
+          ├─ _bake_int8_patches_on_dynamic_patcher (keep _v)
           └─ dump_int8_lora_bake_stats
 ```
 
-## 付録 C — コンソールで見るべき行
+## Appendix C — Console lines to watch
 
-| プレフィックス | 内容 |
-|----------------|------|
-| `[HSWQ INT8 LoRA] ===== load summary =====` | set/convert 準備 |
-| `[HSWQ LoRA Status] Slot N: lora名=...` | アタッチ時 Status |
-| `[HSWQ LoRA Status] ===== bake summary` | bake 後サマリ |
-| `[HSWQ LoRA Bake] path OK (all requant)` | 健全 |
-| `BROKEN_int8_round` / `int8_round` WARN | その層の LoRA は壊れている |
+| Prefix / token | Meaning |
+|----------------|---------|
+| `[HSWQ INT8 LoRA] ===== load summary =====` | set/convert readiness |
+| `[HSWQ LoRA Status] Slot N: lora名=...` | attach-time Status |
+| `[HSWQ LoRA Status] ===== bake summary` | post-bake Status |
+| `[HSWQ LoRA Bake] path OK (all requant)` | healthy bake path |
+| `BROKEN_int8_round` / `int8_round` WARN | LoRA on those layers is broken |
 
-## 付録 D — 再発防止（実装者向け）
+## Appendix D — Maintainer checklist
 
-1. bake 後に `module._v` を delete しない（VBAR bump allocator）。
-2. Status の `lora名` にアダプタ型文字列を入れない。
-3. Conv2d に `set_weight`/`convert_weight` 無しで「LoRA 対応完了」と言わない。
-4. パッチ版番号を上げたら再起動必須。
-5. 本体 `ops.py` へ恒久パッチを戻さない（本拡張の存在理由）。
+1. Do not delete `module._v` after bake (VBAR bump allocator).
+2. Never put adapter type strings in Status `lora名`.
+3. Do not claim “LoRA ready” if Conv2d lacks `set_weight` / `convert_weight`.
+4. Restart ComfyUI after raising patch version constants.
+5. Do not re-introduce permanent core `ops.py` edits; this extension exists so core updates do not wipe the fix.
 
 ---
 
-（本解説書はコミット `{COMMIT[:7]}` 時点のソース全文を埋め込んだ監査用一次資料である。）
+This manual embeds full source as of commit `516ac28` for audit and public documentation.
