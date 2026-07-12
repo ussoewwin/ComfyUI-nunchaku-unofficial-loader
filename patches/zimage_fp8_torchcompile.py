@@ -110,25 +110,41 @@ def _apply_lora_patch() -> bool:
             intermediate_dtype = torch.float32
         v = self.weights
         reshape = v[5]
+        try:
+            from .comfy_quant_int8 import record_lora_shape_skip
+        except ImportError:
+            record_lora_shape_skip = None
+
         if reshape is not None and tuple(reshape) != weight.shape:
+            reason = f"reshape {list(reshape)} != weight.shape {list(weight.shape)}"
             logger.warning(
-                "LoRA %s: skipping %s (reshape %s != weight.shape %s) [z_image/FP8/torch.compile compat]",
-                self.name, key, list(reshape), list(weight.shape),
+                "LoRA %s: skipping %s (%s) [z_image/FP8/torch.compile compat]",
+                self.name, key, reason,
             )
+            if record_lora_shape_skip is not None:
+                record_lora_shape_skip(getattr(self, "name", "?"), key, reason)
             return weight
         try:
             lora_diff_flat = torch.mm(v[0].flatten(start_dim=1), v[1].flatten(start_dim=1))
             if lora_diff_flat.numel() != weight.numel():
-                logger.warning(
-                    "LoRA %s: skipping %s (lora output size %s != weight size %s) [z_image/FP8/torch.compile compat]",
-                    self.name, key, lora_diff_flat.numel(), weight.numel(),
+                reason = (
+                    f"lora output size {lora_diff_flat.numel()} != weight size {weight.numel()}"
                 )
+                logger.warning(
+                    "LoRA %s: skipping %s (%s) [z_image/FP8/torch.compile compat]",
+                    self.name, key, reason,
+                )
+                if record_lora_shape_skip is not None:
+                    record_lora_shape_skip(getattr(self, "name", "?"), key, reason)
                 return weight
         except Exception as e:
+            reason = f"error during lora_diff_flat check: {e}"
             logger.warning(
-                "LoRA %s: skipping %s (error during lora_diff_flat check: %s) [z_image/FP8/torch.compile compat]",
-                self.name, key, e,
+                "LoRA %s: skipping %s (%s) [z_image/FP8/torch.compile compat]",
+                self.name, key, reason,
             )
+            if record_lora_shape_skip is not None:
+                record_lora_shape_skip(getattr(self, "name", "?"), key, reason)
             return weight
         return _original_calculate_weight(
             self,

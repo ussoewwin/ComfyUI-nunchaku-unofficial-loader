@@ -283,18 +283,40 @@ class HSWQLoader:
     RETURN_TYPES = ("MODEL", "CLIP", "VAE")
     FUNCTION = "load_hswq_checkpoint_vram_opt"
     CATEGORY = "HSWQ"
-    TITLE = "HSWQ Scaled FP8 Loader (VRAM Opt)"
+    TITLE = "HSWQ FP8/INT8 Loader (VRAM Opt)"
 
     def load_hswq_checkpoint_vram_opt(self, ckpt_name):
+        from ..patches.comfy_quant_int8 import (
+            apply_comfy_quant_int8_patches,
+            checkpoint_looks_like_comfy_quant_int8,
+            reset_int8_lora_log_counters,
+            summarize_int8_lora_capability,
+        )
+
         ckpt_path = folder_paths.get_full_path("checkpoints", ckpt_name)
-        print(f"[HSWQ] Loading Scaled FP8 Model (VRAM Optimized): {ckpt_name}")
-        
-        # 1. Load state_dict to CPU first
+        print(f"[HSWQ] Loading checkpoint: {ckpt_name}")
+
+        # Native comfy_quant INT8 (int8_tensorwise): use ComfyUI MixedPrecisionOps path.
+        # Requires Conv2d quant patch from this extension (core only loads Linear).
+        if checkpoint_looks_like_comfy_quant_int8(ckpt_path):
+            apply_comfy_quant_int8_patches()
+            reset_int8_lora_log_counters()
+            print("[HSWQ] Detected comfy_quant INT8 (int8_tensorwise); using native MixedPrecisionOps path")
+            model, clip, vae, _clipvision = comfy.sd.load_checkpoint_guess_config(
+                ckpt_path,
+                output_vae=True,
+                output_clip=True,
+                embedding_directory=folder_paths.get_folder_paths("embeddings"),
+            )
+            summarize_int8_lora_capability(model)
+            return (model, clip, vae)
+
+        # 1. Load state_dict to CPU first (legacy Scaled FP8 .scale path)
         state_dict = safetensors.torch.load_file(ckpt_path, device="cpu")
-        
-        scale_map = {} # key: weight_key, value: scale_tensor
-        weight_map = {} # key: weight_key, value: fp8_weight_tensor (stored BEFORE dequantization)
-        
+
+        scale_map = {}  # key: weight_key, value: scale_tensor
+        weight_map = {}  # key: weight_key, value: fp8_weight_tensor (stored BEFORE dequantization)
+
         # Extract scales and weights, then DEQUANTIZE for ComfyUI's load_state_dict
         # This is crucial: PyTorch's load_state_dict cannot load FP8 tensors into FP16 nn.Parameters
         keys_to_remove = []
@@ -304,52 +326,52 @@ class HSWQLoader:
                     weight_key = key.replace(".weight.scale", ".weight")
                 else:
                     weight_key = key.replace(".scale", ".weight")
-                
+
                 if weight_key in state_dict:
                     fp8_weight = state_dict[weight_key]
                     scale = state_dict[key]
-                    
+
                     # Store original FP8 weight for HSWQ layer replacement later
                     scale_map[weight_key] = scale.clone()
                     weight_map[weight_key] = fp8_weight.clone()
-                    
+
                     # DEQUANTIZE to FP16 for ComfyUI's load_state_dict compatibility
                     # This ensures the model loads correctly and LoRA can be applied
                     dequantized = dequantize_fp8_weight(fp8_weight, scale, torch.float16)
                     state_dict[weight_key] = dequantized
-                    
+
                     # Mark scale key for removal (ComfyUI doesn't need it)
                     keys_to_remove.append(key)
-        
+
         # Remove scale keys from state_dict
         for key in keys_to_remove:
             del state_dict[key]
-        
+
         print(f"[HSWQ] Dequantized {len(scale_map)} FP8 weights to FP16 for model loading")
-        
+
         # 2. Inject into ComfyUI loading mechanism
         # Monkey patch load_torch_file to avoid re-reading the file from disk
         original_loader = comfy.utils.load_torch_file
-        
+
         def patched_loader(path, safe_load=False, device=None, return_metadata=False):
             if os.path.normpath(path) == os.path.normpath(ckpt_path):
                 if return_metadata:
-                    # safetensors header info might be lost here but usually empty dict is enough for inference 
+                    # safetensors header info might be lost here but usually empty dict is enough for inference
                     # unless strict metadata checking is performed.
-                    return state_dict, {} 
+                    return state_dict, {}
                 return state_dict
             return original_loader(path, safe_load, device, return_metadata=return_metadata)
-        
+
         comfy.utils.load_torch_file = patched_loader
-        
+
         try:
             # 3. Standard Load (uses patched loader with DEQUANTIZED weights)
             # Now ComfyUI can properly load all weights and LoRA will work correctly
             model, clip, vae, clipvision = comfy.sd.load_checkpoint_guess_config(
-                ckpt_path, 
-                output_vae=True, 
-                output_clip=True, 
-                embedding_directory=folder_paths.get_folder_paths("embeddings")
+                ckpt_path,
+                output_vae=True,
+                output_clip=True,
+                embedding_directory=folder_paths.get_folder_paths("embeddings"),
             )
         finally:
             # Restore original loader
@@ -360,14 +382,14 @@ class HSWQLoader:
         hswq_replaced_count = 0
         fp8_param_bytes = 0
         unet = model.model.diffusion_model
-        
+
         # Collect modules to replace (avoid modifying during iteration)
         modules_to_replace = []
         for name, module in unet.named_modules():
             key_name = f"model.diffusion_model.{name}.weight"
             if key_name in scale_map:
                 modules_to_replace.append((name, module, scale_map[key_name], weight_map[key_name]))
-        
+
         for name, module, scale, weight_val in modules_to_replace:
             if "." in name:
                 parent_name, child_name = name.rsplit(".", 1)
@@ -387,32 +409,33 @@ class HSWQLoader:
                 setattr(parent, child_name, new_layer)
                 hswq_replaced_count += 1
                 fp8_param_bytes += weight_val.numel()
-        
+
         fp8_mb = fp8_param_bytes / (1024 * 1024)
         fp16_equivalent_mb = (fp8_param_bytes * 2) / (1024 * 1024)
         print(f"[HSWQ] Replaced {hswq_replaced_count} layers with FP8 storage.")
         print(f"[HSWQ] VRAM for FP8 weights: {fp8_mb:.1f} MB (vs {fp16_equivalent_mb:.1f} MB if FP16)")
-        
+
         # Reset LoRA log counters for fresh tracking
         HSWQLinear._lora_log_count = 0
         HSWQConv2d._lora_log_count = 0
-        
+
         # Verify state_dict contains weights for LoRA key mapping
         test_sd = model.model.state_dict()
-        weight_keys = [k for k in test_sd.keys() if k.endswith('.weight') and 'diffusion_model' in k]
+        weight_keys = [k for k in test_sd.keys() if k.endswith(".weight") and "diffusion_model" in k]
         print(f"[HSWQ] Model state_dict has {len(weight_keys)} diffusion_model weight keys for LoRA mapping")
-        
+
         # Test that set_weight is discoverable
         test_layer = unet.get_submodule("input_blocks.1.0.out_layers.3")
-        has_set_weight = hasattr(test_layer, 'set_weight') and callable(getattr(test_layer, 'set_weight', None))
+        has_set_weight = hasattr(test_layer, "set_weight") and callable(getattr(test_layer, "set_weight", None))
         print(f"[HSWQ] HSWQ layers have set_weight method: {has_set_weight}")
-        
+
         # Clear CPU memory
         del state_dict
         del weight_map
         del scale_map
         del test_sd
         import gc
+
         gc.collect()
-        
+
         return (model, clip, vae)

@@ -331,6 +331,14 @@ try:
 except Exception as e:
     logger.debug("HSWQ PinDebug: not installed: %s", e)
 
+# Native comfy_quant INT8 (int8_tensorwise): Conv2d quant load + comfy_quant decode
+# (ComfyUI core MixedPrecisionOps only covers Linear; SD UNet INT8 needs Conv2d.)
+try:
+    from .patches.comfy_quant_int8 import apply_comfy_quant_int8_patches
+    apply_comfy_quant_int8_patches()
+except Exception as e:
+    logger.debug("HSWQ INT8 comfy_quant patches not applied: %s", e)
+
 # HSWQ&Nunchaku Ultimate SD Upscale: apply copy_ / FP8 bias / embedder / Lumina compat patches in this extension
 try:
     from .usdu_compat_patches import apply_usdu_compat_patches
@@ -920,7 +928,7 @@ except (ImportError, ModuleNotFoundError) as e:
 try:
     from .nodes.hswq_loader_node import HSWQLoader
     NODE_CLASS_MAPPINGS["HSWQLoader"] = HSWQLoader
-    sdxl_logger.info("[SDXL] Registered HSWQLoader node (Scaled FP8 Loader)")
+    sdxl_logger.info("[SDXL] Registered HSWQLoader node (FP8/INT8 Loader)")
 except (ImportError, ModuleNotFoundError) as e:
     sdxl_logger.exception(f"[SDXL] Failed to register HSWQLoader: {e}")
 

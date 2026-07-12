@@ -953,7 +953,7 @@ class HSWQFP8E4M3UNetLoader:
     @classmethod
     def INPUT_TYPES(s):
         return {"required": { "unet_name": (folder_paths.get_filename_list("diffusion_models"), ),
-                              "weight_dtype": (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"],)
+                              "weight_dtype": (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2", "int8_tensorwise"],)
                              }}
     RETURN_TYPES = ("MODEL",)
     FUNCTION = "load_unet"
@@ -962,17 +962,39 @@ class HSWQFP8E4M3UNetLoader:
     TITLE = "HSWQ FP8 E4M3 UNet Loader"
 
     def load_unet(self, unet_name, weight_dtype):
-        model_options = {}
-        if weight_dtype == "fp8_e4m3fn":
-            model_options["dtype"] = torch.float8_e4m3fn
-        elif weight_dtype == "fp8_e4m3fn_fast":
-            model_options["dtype"] = torch.float8_e4m3fn
-            model_options["fp8_optimizations"] = True
-        elif weight_dtype == "fp8_e5m2":
-            model_options["dtype"] = torch.float8_e5m2
+        from ..patches.comfy_quant_int8 import (
+            apply_comfy_quant_int8_patches,
+            checkpoint_looks_like_comfy_quant_int8,
+            reset_int8_lora_log_counters,
+            summarize_int8_lora_capability,
+        )
+
+        # INT8 Conv2d + comfy_quant decode patches (core only handles Linear).
+        apply_comfy_quant_int8_patches()
 
         unet_path = folder_paths.get_full_path_or_raise("diffusion_models", unet_name)
+
+        # Auto-detect native comfy_quant INT8 UNet; do not force float8 dtype over int8 weights.
+        is_int8 = weight_dtype == "int8_tensorwise" or checkpoint_looks_like_comfy_quant_int8(unet_path)
+
+        if is_int8:
+            model_options = {}
+            reset_int8_lora_log_counters()
+            logging.info("[HSWQ INT8] Loading UNet via MixedPrecisionOps (int8_tensorwise / comfy_quant)")
+            print(f"[HSWQ INT8] Loading UNet: {unet_name}", flush=True)
+        else:
+            model_options = {}
+            if weight_dtype == "fp8_e4m3fn":
+                model_options["dtype"] = torch.float8_e4m3fn
+            elif weight_dtype == "fp8_e4m3fn_fast":
+                model_options["dtype"] = torch.float8_e4m3fn
+                model_options["fp8_optimizations"] = True
+            elif weight_dtype == "fp8_e5m2":
+                model_options["dtype"] = torch.float8_e5m2
+
         model = comfy.sd.load_diffusion_model(unet_path, model_options=model_options)
+        if is_int8:
+            summarize_int8_lora_capability(model)
 
         return (model,)
 
