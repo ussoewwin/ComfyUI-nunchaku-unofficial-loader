@@ -790,11 +790,29 @@ def _patch_ops_decode_and_conv() -> bool:
     # Also normalize Embedding's direct json.loads path by wrapping Embedding._load_from_state_dict
     # is covered if convert_old_quants + file markers are normalized; keep load wrapper as safety.
 
-    original_mp = getattr(ops_module, "mixed_precision_ops", None)
-    if original_mp is None or not callable(original_mp):
+    # mixed_precision_ops is ComfyUI's comfy_quant path (INT8). Always inject
+    # Quantized Conv2d — core only builds Linear. Gating on quant_config broke
+    # INT8 load (int8 weights → float Parameter → requires_grad error).
+    _CONV_PATCH_VER = 3
+    current_mp = getattr(ops_module, "mixed_precision_ops", None)
+    if current_mp is None or not callable(current_mp):
         return False
-    if getattr(original_mp, "_hswq_int8_conv_patched", False):
+    if (
+        getattr(current_mp, "_hswq_int8_conv_patched", False)
+        and getattr(current_mp, "_hswq_int8_conv_patch_ver", 0) >= _CONV_PATCH_VER
+    ):
         return True
+
+    original_mp = getattr(current_mp, "_hswq_original_mp", None)
+    if original_mp is None:
+        if getattr(current_mp, "_hswq_int8_conv_patched", False):
+            # Old gated wrapper without stored original — cannot unwrap safely.
+            logger.error(
+                "[HSWQ INT8] stale mixed_precision_ops wrap (gated Conv2d); "
+                "restart ComfyUI to reload patches"
+            )
+            return False
+        original_mp = current_mp
 
     def mixed_precision_ops_force_conv(
         quant_config=None, compute_dtype=None, full_precision_mm=False, disabled=None
@@ -813,12 +831,13 @@ def _patch_ops_decode_and_conv() -> bool:
             full_precision_mm=full_precision_mm,
             disabled=disabled,
         )
-        # INT8-only: do not replace Conv2d for FP8 / other MixedPrecisionOps configs.
-        if _quant_config_has_int8_tensorwise(quant_config):
-            result.Conv2d = _make_quantized_conv2d(ops_module, result, disabled)
+        # Always replace inherited manual_cast.Conv2d with INT8-capable Conv2d.
+        result.Conv2d = _make_quantized_conv2d(ops_module, result, disabled)
         return result
 
     mixed_precision_ops_force_conv._hswq_int8_conv_patched = True
+    mixed_precision_ops_force_conv._hswq_int8_conv_patch_ver = _CONV_PATCH_VER
+    mixed_precision_ops_force_conv._hswq_original_mp = original_mp
     ops_module.mixed_precision_ops = mixed_precision_ops_force_conv
     return True
 
@@ -1479,12 +1498,16 @@ def apply_comfy_quant_int8_patches() -> bool:
     ok_lowvram = _patch_lowvram_patch_float_intermediate()
     ok_dyn_bake = _patch_model_patcher_dynamic_int8_lora_bake()
     ok_lora_log = _patch_model_patcher_lora_logs()
+    # Always (re)ensure ops Conv2d wrap — gated v2 left MixedPrecisionOps.Conv2d
+    # as float and INT8 load crashed with requires_grad on int8.
+    ok_ops = _patch_ops_decode_and_conv()
     if _PATCHES_APPLIED:
         if not ok_dyn_bake:
             logger.error("[HSWQ INT8] Dynamic LoRA bake wrap missing after re-entry")
-        return True
+        if not ok_ops:
+            logger.error("[HSWQ INT8] Conv2d MixedPrecisionOps wrap missing after re-entry")
+        return bool(ok_ops)
     ok_utils = _patch_convert_old_quants()
-    ok_ops = _patch_ops_decode_and_conv()
     if ok_ops:
         _PATCHES_APPLIED = True
         _console(
