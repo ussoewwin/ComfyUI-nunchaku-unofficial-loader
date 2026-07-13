@@ -1550,16 +1550,44 @@ def install_int8_option_dispatch(node_class_mappings) -> bool:
 
     apply_comfy_quant_int8_patches()
 
+    _FP8_WEIGHT_DTYPES = frozenset({"fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"})
+
     unet_cls = node_class_mappings.get("HSWQFP8E4M3UNetLoader")
     if unet_cls is not None:
+        _orig_load_unet = unet_cls.load_unet
+
         def load_unet(self, unet_name, weight_dtype):
-            return load_unet_hswq_weight_dtype(unet_name, weight_dtype)
+            # Explicit FP8 choices stay on the original FP loader body — never INT8 helper.
+            if weight_dtype in _FP8_WEIGHT_DTYPES:
+                return _orig_load_unet(self, unet_name, weight_dtype)
+            if weight_dtype == "int8_tensorwise":
+                return load_unet_hswq_weight_dtype(unet_name, weight_dtype)
+            # default: auto-detect INT8 checkpoints only; otherwise original FP path.
+            import folder_paths
+
+            unet_path = folder_paths.get_full_path_or_raise("diffusion_models", unet_name)
+            if checkpoint_looks_like_comfy_quant_int8(unet_path):
+                return load_unet_hswq_weight_dtype(unet_name, weight_dtype)
+            return _orig_load_unet(self, unet_name, weight_dtype)
+
         unet_cls.load_unet = load_unet
 
     sdxl_cls = node_class_mappings.get("NunchakuUssoewwinCheckpointLoaderSDXL")
     if sdxl_cls is not None:
+        _orig_load_checkpoint = sdxl_cls.load_checkpoint
+
         def load_checkpoint(self, ckpt_name, weight_dtype, device=None):
-            return load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device)
+            if weight_dtype in _FP8_WEIGHT_DTYPES:
+                return _orig_load_checkpoint(self, ckpt_name, weight_dtype, device)
+            if weight_dtype == "int8_tensorwise":
+                return load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device)
+            import folder_paths
+
+            ckpt_path = folder_paths.get_full_path_or_raise("checkpoints", ckpt_name)
+            if checkpoint_looks_like_comfy_quant_int8(ckpt_path):
+                return load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device)
+            return _orig_load_checkpoint(self, ckpt_name, weight_dtype, device)
+
         sdxl_cls.load_checkpoint = load_checkpoint
 
     return True
