@@ -946,14 +946,6 @@ try:
 except (ImportError, ModuleNotFoundError) as e:
     logger.debug("HSWQ FP8 E4M3 UNet Loader not registered: %s", e)
 
-# HSWQ Loader registration
-try:
-    from .nodes.hswq_loader_node import HSWQLoader
-    NODE_CLASS_MAPPINGS["HSWQLoader"] = HSWQLoader
-    sdxl_logger.info("[SDXL] Registered HSWQLoader node (FP8/INT8 Loader)")
-except (ImportError, ModuleNotFoundError) as e:
-    sdxl_logger.exception(f"[SDXL] Failed to register HSWQLoader: {e}")
-
 # HSWQ Batched Detailer (SEGS) - phase-split version to minimize model switching
 try:
     from .nodes.hswq_batched_detailer import HSWQBatchedDetailer
