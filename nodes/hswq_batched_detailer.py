@@ -693,12 +693,31 @@ class HSWQBatchedDetailer:
         tiled_encode=False,
         tiled_decode=False,
     ):
-        import comfy.pinned_memory as _pm_mod
-
-        prev_active = getattr(_pm_mod, "_hswq_pin_cache_active", False)
-        _pm_mod._hswq_pin_cache_active = True
+        # Do not toggle global pin_memory monkey-patches here.
+        # Import-time / global PinCache broke Dynamic VRAM + Nunchaku; keep
+        # ComfyUI's native pinned_memory for all models including this node.
         try:
-            try:
+            enhanced_img, *_ = HSWQBatchedDetailer.do_detail_batched(
+                image, segs, model, clip, vae,
+                guide_size, guide_size_for, max_size, seed, steps, cfg,
+                sampler_name, scheduler, positive, negative, denoise, feather,
+                noise_mask, force_inpaint, wildcard, detailer_hook,
+                cycle=cycle, inpaint_model=inpaint_model,
+                noise_mask_feather=noise_mask_feather,
+                scheduler_func_opt=scheduler_func_opt,
+                tiled_encode=tiled_encode, tiled_decode=tiled_decode,
+                force_fixed_latent_size=False,
+            )
+        except RuntimeError as e:
+            err_msg = str(e)
+            if "QuantizedTensor" in err_msg and (
+                "copy_" in err_msg or "size mismatch" in err_msg
+            ):
+                logging.warning(
+                    "[HSWQ] BatchedDetailer: QuantizedTensor copy_ mismatch. "
+                    "Retrying with fixed latent size for all segments: %s",
+                    err_msg[:200],
+                )
                 enhanced_img, *_ = HSWQBatchedDetailer.do_detail_batched(
                     image, segs, model, clip, vae,
                     guide_size, guide_size_for, max_size, seed, steps, cfg,
@@ -708,32 +727,9 @@ class HSWQBatchedDetailer:
                     noise_mask_feather=noise_mask_feather,
                     scheduler_func_opt=scheduler_func_opt,
                     tiled_encode=tiled_encode, tiled_decode=tiled_decode,
-                    force_fixed_latent_size=False,
+                    force_fixed_latent_size=True,
                 )
-            except RuntimeError as e:
-                err_msg = str(e)
-                if "QuantizedTensor" in err_msg and (
-                    "copy_" in err_msg or "size mismatch" in err_msg
-                ):
-                    logging.warning(
-                        "[HSWQ] BatchedDetailer: QuantizedTensor copy_ mismatch. "
-                        "Retrying with fixed latent size for all segments: %s",
-                        err_msg[:200],
-                    )
-                    enhanced_img, *_ = HSWQBatchedDetailer.do_detail_batched(
-                        image, segs, model, clip, vae,
-                        guide_size, guide_size_for, max_size, seed, steps, cfg,
-                        sampler_name, scheduler, positive, negative, denoise, feather,
-                        noise_mask, force_inpaint, wildcard, detailer_hook,
-                        cycle=cycle, inpaint_model=inpaint_model,
-                        noise_mask_feather=noise_mask_feather,
-                        scheduler_func_opt=scheduler_func_opt,
-                        tiled_encode=tiled_encode, tiled_decode=tiled_decode,
-                        force_fixed_latent_size=True,
-                    )
-                else:
-                    raise
+            else:
+                raise
 
-            return (enhanced_img,)
-        finally:
-            _pm_mod._hswq_pin_cache_active = prev_active
+        return (enhanced_img,)

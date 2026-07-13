@@ -512,6 +512,37 @@ def _patch_convert_old_quants() -> bool:
     return True
 
 
+def _quant_config_has_int8_tensorwise(quant_config) -> bool:
+    """True if MixedPrecisionOps quant_config targets int8_tensorwise layers."""
+    if not isinstance(quant_config, dict) or not quant_config:
+        return False
+    for v in quant_config.values():
+        if isinstance(v, dict) and v.get("format") == "int8_tensorwise":
+            return True
+        if v == "int8_tensorwise":
+            return True
+    return False
+
+
+def _model_has_int8_quantized_weights(model) -> bool:
+    """True if model already carries INT8 / QuantizedTensor weights (post-load)."""
+    try:
+        import torch
+        from comfy.quant_ops import QuantizedTensor
+    except ImportError:
+        return False
+    for _, module in model.named_modules():
+        w = getattr(module, "weight", None)
+        if w is None:
+            continue
+        if isinstance(w, QuantizedTensor):
+            return True
+        dtype = getattr(w, "dtype", None)
+        if dtype is not None and dtype in (torch.int8, getattr(torch, "qint8", torch.int8)):
+            return True
+    return False
+
+
 def _make_quantized_conv2d(ops_module, MixedPrecisionOps, disabled):
     """Build MixedPrecisionOps.Conv2d class using current comfy.ops helpers."""
     import torch
@@ -756,8 +787,10 @@ def _patch_ops_decode_and_conv() -> bool:
             full_precision_mm=full_precision_mm,
             disabled=disabled,
         )
-        # Always replace inherited manual_cast.Conv2d with INT8-capable Conv2d.
-        result.Conv2d = _make_quantized_conv2d(ops_module, result, disabled)
+        # Only inject INT8 Conv2d when this ops factory is for int8_tensorwise.
+        # Never rewrite Conv2d for FP8 / Nunchaku / other MixedPrecision paths.
+        if _quant_config_has_int8_tensorwise(quant_config):
+            result.Conv2d = _make_quantized_conv2d(ops_module, result, disabled)
         return result
 
     mixed_precision_ops_force_conv._hswq_int8_conv_patched = True
@@ -973,6 +1006,11 @@ def _patch_model_patcher_dynamic_int8_lora_bake() -> bool:
             full_load=full_load,
             dirty=dirty,
         )
+        # INT8 LoRA bake only — skip for Nunchaku / FP8 / plain bf16 Dynamic loads.
+        if not _model_has_int8_quantized_weights(self.model) and not getattr(
+            self.model, "_hswq_int8_baked_keys", None
+        ):
+            return result
         # Load re-attaches LowVramPatch for any keys still in patches / clones
         _strip_lowvram_for_baked_keys(self)
         if self.patches:
@@ -1461,15 +1499,13 @@ def load_unet_hswq_weight_dtype(unet_name, weight_dtype):
     import folder_paths
     import comfy.sd
 
-    # INT8 Conv2d + comfy_quant decode patches (core only handles Linear).
-    apply_comfy_quant_int8_patches()
-
+    # INT8 Conv2d + comfy_quant decode patches only when loading INT8.
+    # Do not apply for FP8 / default weight_dtype (those stay on original path).
     unet_path = folder_paths.get_full_path_or_raise("diffusion_models", unet_name)
-
-    # Auto-detect native comfy_quant INT8 UNet; do not force float8 dtype over int8 weights.
     is_int8 = weight_dtype == "int8_tensorwise" or checkpoint_looks_like_comfy_quant_int8(unet_path)
 
     if is_int8:
+        apply_comfy_quant_int8_patches()
         model_options = {}
         reset_int8_lora_log_counters()
         logging.info("[HSWQ INT8] Loading UNet via MixedPrecisionOps (int8_tensorwise / comfy_quant)")
@@ -1506,15 +1542,14 @@ def load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device=None)
     if device is not None:
         set_current_device(device)
     try:
-        # INT8 Conv2d + comfy_quant decode (core only handles Linear).
-        apply_comfy_quant_int8_patches()
-
+        # INT8 Conv2d + comfy_quant decode only when checkpoint is INT8.
         ckpt_path = folder_paths.get_full_path_or_raise("checkpoints", ckpt_name)
         # Auto-detect native comfy_quant INT8; do not force float8 dtype over int8 weights.
         is_int8 = weight_dtype == "int8_tensorwise" or checkpoint_looks_like_comfy_quant_int8(ckpt_path)
 
         model_options = {}
         if is_int8:
+            apply_comfy_quant_int8_patches()
             reset_int8_lora_log_counters()
             sdxl_logger.info(
                 "[SDXL INT8] Loading checkpoint via MixedPrecisionOps "
@@ -1548,7 +1583,9 @@ def install_int8_option_dispatch(node_class_mappings) -> bool:
     if not isinstance(node_class_mappings, dict):
         return False
 
-    apply_comfy_quant_int8_patches()
+    # Do NOT apply INT8 patches at node registration / import.
+    # Patches install only inside load_unet_hswq_weight_dtype /
+    # load_checkpoint_sdxl_hswq_weight_dtype when INT8 is actually loaded.
 
     _FP8_WEIGHT_DTYPES = frozenset({"fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"})
 
