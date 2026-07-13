@@ -153,8 +153,9 @@ from .utils import get_package_version, get_plugin_version
 # Old pin_memory(module)/unpin_memory wrappers break current ComfyUI
 # pinned_memory.pin_memory(module, subset=, size=) (hostbuf Dynamic VRAM)
 # and poisoned Nunchaku / Z-Image / Lumina2 loads (0.00 MB usable → CUDA abort).
-# That pin-buffer cache was Detailer-facing only; it is disabled until rewritten
-# for the hostbuf API. Native ComfyUI pin is used for all models.
+# Detailer-only rewrite: nodes/hswq_pin_cache.py (activate inside
+# HSWQBatchedDetailer.doit via hswq_pin_cache_scope). Native ComfyUI pin
+# elsewhere.
 # INT8 comfy_quant patches are NOT applied at import either — only when an
 # INT8 HSWQ / SDXL load path calls apply_comfy_quant_int8_patches().
 
