@@ -67,9 +67,9 @@ Restart ComfyUI to load the nodes.
 
 ## Nodes
 
-### Checkpoint Loader (SDXL)
+### HSWQ Checkpoint Loader (SDXL)
 
-<img src="png/fp8e4m3.png" alt="Checkpoint Loader (SDXL) Node" width="400">
+<img src="png/fp8e4m3.png" alt="HSWQ Checkpoint Loader (SDXL) Node" width="400">
 
 ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, with optional device selection and FP8 precision support. Use it like the standard Load Checkpoint node; it outputs MODEL and CLIP only (no VAE).
 
