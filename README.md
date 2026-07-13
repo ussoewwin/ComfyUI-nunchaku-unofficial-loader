@@ -88,12 +88,13 @@ ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, w
 
 <img src="png/fp8-int8-loader.png" alt="HSWQ FP8/INT8 Loader (VRAM Opt)" width="600">
 
-ComfyUI checkpoint loader for **general FP8 and INT8** SDXL checkpoints (not limited to HSWQ-only weights). Select a file under `checkpoints` via `ckpt_name`. Outputs **MODEL**, **CLIP**, and **VAE** like the standard Load Checkpoint node.
+ComfyUI node that loads **MODEL**, **CLIP**, and **VAE** from FP8 and INT8 SDXL checkpoints. Use it like the standard Load Checkpoint node. Same scope as the other HSWQ UNet / checkpoint loaders in this extension: **general FP8 and INT8**, not limited to HSWQ-only weights.
 
-#### What it loads
+#### Features
 
+- **Checkpoint Loading**: Loads MODEL, CLIP, and VAE from a single checkpoint file under `checkpoints` (`ckpt_name`)
 - **General FP8**: Scaled FP8 / `.weight` + `.scale` style checkpoints (including HSWQ FP8 E4M3), with VRAM-oriented layer handling
-- **General INT8**: Native **comfy_quant** / `int8_tensorwise` checkpoints via ComfyUI `MixedPrecisionOps` (this extension also patches **Conv2d** quant load so SD UNet INT8 works, not Linear-only)
+- **General INT8**: Native **comfy_quant** / `int8_tensorwise` via ComfyUI `MixedPrecisionOps` (this extension also patches **Conv2d** quant load so SD UNet INT8 works, not Linear-only)
 - **Auto path selection**: Probes the safetensors file; INT8 comfy_quant → native MixedPrecisionOps path; otherwise → Scaled FP8 VRAM-opt path
 
 #### Typical wiring (see screenshot)
@@ -167,7 +168,7 @@ ComfyUI output node that saves images to your ComfyUI **output** folder as **PNG
 
 <img src="png/hswqunet.png" alt="HSWQ FP8 E4M3 UNet Loader" width="400">
 
-Standard ComfyUI UNet loader wrapper that loads HSWQ FP8 E4M3 diffusion models. When this extension is loaded, it also installs a **Pin Buffer Cache** that patches ComfyUI’s `pin_memory` / `unpin_memory` used by Dynamic VRAM Loading.
+Standard ComfyUI UNet loader wrapper that loads FP8 and INT8 diffusion models (**general FP8 and INT8**, not limited to HSWQ-only weights)—same scope as **HSWQ FP8/INT8 Loader (VRAM Opt)**. When this extension is loaded, it also installs a **Pin Buffer Cache** that patches ComfyUI’s `pin_memory` / `unpin_memory` used by Dynamic VRAM Loading.
 
 #### Why the Pin Buffer Cache matters
 
@@ -175,7 +176,7 @@ With **Dynamic VRAM Loading**, ComfyUI loads each layer on demand (CPU → GPU) 
 
 #### What this loader does
 
-- **Node**: Loads the UNet (MODEL) from HSWQ FP8 E4M3 checkpoints like the standard UNet loader.
+- **Node**: Loads the UNet (MODEL) from FP8 / INT8 checkpoints like the standard UNet loader (HSWQ FP8 E4M3, Scaled FP8, and native comfy_quant / `int8_tensorwise` when selected or auto-detected).
 - **Cache (extension-wide)**: Monkey-patches `comfy.pinned_memory.pin_memory` and `unpin_memory`. On unpin, buffers are stored in a size-keyed pool (up to a cap, e.g. 16GB) instead of being destroyed. On pin, a matching buffer is reused when available, avoiding repeated `cudaHostRegister`/`cudaHostUnregister` and reducing stalls.
 
 ### HSWQ Batched Detailer (SEGS)
