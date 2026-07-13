@@ -71,20 +71,23 @@ Restart ComfyUI to load the nodes.
 
 <img src="png/fp8e4m3.png" alt="HSWQ Checkpoint Loader (SDXL) Node" width="400">
 
-ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, with optional device selection and FP8 precision support. Use it like the standard Load Checkpoint node; it outputs MODEL and CLIP only (no VAE).
+ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, with optional device selection and **FP8 / INT8** precision support. Use it like the standard Load Checkpoint node; it outputs MODEL and CLIP only (no VAE). Scope is **general FP8 and INT8** (including HSWQ and native comfy_quant), not limited to HSWQ-only weights.
 
 #### Features
 
 - **Checkpoint Loading**: Loads both UNet (MODEL) and CLIP from a single SDXL checkpoint file (same as standard Load Checkpoint)
 - **Device Selection**: Optional device parameter to choose GPU (e.g. `cuda:0`, `cuda:1`) or CPU for model loading
-- **Weight dtype**: Supports `default`, `fp8_e4m3fn`, `fp8_e4m3fn_fast`, `fp8_e5m2`, and `int8_tensorwise` (native comfy_quant INT8 / MixedPrecisionOps; INT8 checkpoints are also auto-detected)
+- **FP8 weight dtype**: `default`, `fp8_e4m3fn`, `fp8_e4m3fn_fast`, `fp8_e5m2`
+- **INT8 weight dtype**: `int8_tensorwise` — native **comfy_quant** / `int8_tensorwise` via ComfyUI `MixedPrecisionOps` (this extension also patches **Conv2d** quant load so SD UNet INT8 works, not Linear-only)
+- **INT8 auto-detect**: If the safetensors looks like comfy_quant INT8, the loader uses the MixedPrecisionOps path even when `weight_dtype` is not set to `int8_tensorwise` (does not force float8 over int8 weights)
 - **Standard ComfyUI Integration**: Uses `load_checkpoint_guess_config`; compatible with standard ComfyUI workflows
 
 #### Usage Notes
 
-- **Inputs**: `ckpt_name` (checkpoint file), `weight_dtype` (precision), and optionally `device`
+- **Inputs**: `ckpt_name` (checkpoint file), `weight_dtype` (`default` / FP8 options / `int8_tensorwise`), and optionally `device`
 - **Outputs**: MODEL and CLIP only; use a separate VAE loader if needed
 - **Category**: Loaders (`loaders`)
+- **INT8 + LoRA**: For INT8 LoRA bake / Status logging details, see `md/HSWQ_INT8_AND_LORA_TECHNICAL_GUIDE.md`
 
 ### HSWQ&Nunchaku Ultimate SD Upscale
 
