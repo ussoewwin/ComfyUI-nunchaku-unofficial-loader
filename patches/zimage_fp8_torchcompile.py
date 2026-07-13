@@ -1,10 +1,9 @@
 """
-Patch to prevent mat1/mat2 shape mismatch under Z Image + FP8 E4M3 + torch.compile
-(inside ComfyUI-nunchaku-unofficial-loader).
+Z Image + FP8 E4M3 + torch.compile 時の mat1/mat2 shape 不一致を防ぐパッチ（ComfyUI-nunchaku-unofficial-loader 内）。
 
-- LoRA: skip applying a layer when reshape or LoRA output numel does not match weight.
-- comfy.ops Linear: during torch.compile, or when input.shape[-1] != weight.shape[1],
-  avoid the 3D/QuantizedTensor path; on mismatch, slice input to weight.shape[1] to prevent crash.
+- LoRA: reshape や lora 出力要素数が weight と一致しない場合はそのレイヤへの適用をスキップする。
+- comfy.ops Linear: torch.compile 中、または input.shape[-1] != weight.shape[1] のときは
+  3D/QuantizedTensor 経路を通さず、不一致時は入力を weight.shape[1] でスライスしてクラッシュを防ぐ。
 """
 from __future__ import annotations
 
@@ -15,7 +14,7 @@ _PATCHES_APPLIED = False
 
 
 def _apply_ops_patch() -> bool:
-    """Wrap comfy.ops.mixed_precision_ops; skip 3D/FP8 input path on torch.compile / shape mismatch."""
+    """comfy.ops.mixed_precision_ops をラップし、torch.compile / shape 不一致時に 3D/FP8 input 経路をスキップする。"""
     try:
         import torch
         import comfy.ops as ops_module
@@ -82,7 +81,7 @@ def _apply_ops_patch() -> bool:
 
 
 def _apply_lora_patch() -> bool:
-    """Wrap LoraDiff.calculate_weight; for z_image/FP8 skip on reshape / numel mismatch."""
+    """LoraDiff.calculate_weight をラップし、z_image/FP8 時は reshape ・要素数不一致でスキップする。"""
     try:
         import torch
         import comfy.weight_adapter.lora as lora_module
@@ -111,6 +110,10 @@ def _apply_lora_patch() -> bool:
             intermediate_dtype = torch.float32
         v = self.weights
         reshape = v[5]
+        try:
+            from .comfy_quant_int8 import record_lora_shape_skip
+        except ImportError:
+            record_lora_shape_skip = None
 
         if reshape is not None and tuple(reshape) != weight.shape:
             reason = f"reshape {list(reshape)} != weight.shape {list(weight.shape)}"
@@ -118,6 +121,8 @@ def _apply_lora_patch() -> bool:
                 "LoRA %s: skipping %s (%s) [z_image/FP8/torch.compile compat]",
                 self.name, key, reason,
             )
+            if record_lora_shape_skip is not None:
+                record_lora_shape_skip(getattr(self, "name", "?"), key, reason)
             return weight
         try:
             lora_diff_flat = torch.mm(v[0].flatten(start_dim=1), v[1].flatten(start_dim=1))
@@ -129,6 +134,8 @@ def _apply_lora_patch() -> bool:
                     "LoRA %s: skipping %s (%s) [z_image/FP8/torch.compile compat]",
                     self.name, key, reason,
                 )
+                if record_lora_shape_skip is not None:
+                    record_lora_shape_skip(getattr(self, "name", "?"), key, reason)
                 return weight
         except Exception as e:
             reason = f"error during lora_diff_flat check: {e}"
@@ -136,6 +143,8 @@ def _apply_lora_patch() -> bool:
                 "LoRA %s: skipping %s (%s) [z_image/FP8/torch.compile compat]",
                 self.name, key, reason,
             )
+            if record_lora_shape_skip is not None:
+                record_lora_shape_skip(getattr(self, "name", "?"), key, reason)
             return weight
         return _original_calculate_weight(
             self,
@@ -155,11 +164,11 @@ def _apply_lora_patch() -> bool:
 
 def _apply_rmsnorm_patch() -> bool:
     """
-    Wrap comfy.ops.RMSNorm.forward_comfy_cast_weights so a mismatch between
-    normalized_shape[0] and input.shape[-1] does not crash.
+    comfy.ops.RMSNorm.forward_comfy_cast_weights をラップし、
+    normalized_shape[0] と input.shape[-1] が異なる場合でも落ちないようにする。
 
-    - matching shapes: keep original implementation
-    - mismatch: slice/pad weight to input dim and call torch.rms_norm directly
+    - 形が一致している場合: 元の実装のまま
+    - 形が不一致の場合: weight の方を input の次元数に合わせてスライス／パディングし、torch.rms_norm を直接呼ぶ
     """
     try:
         import torch
@@ -213,8 +222,8 @@ def _apply_rmsnorm_patch() -> bool:
 
 def apply_zimage_fp8_torchcompile_patches() -> bool:
     """
-    Apply Z Image FP8 E4M3 + torch.compile compatibility patches.
-    Skip if already applied. Return whether patches were applied.
+    Z Image FP8 E4M3 + torch.compile 互換パッチを適用する。
+    重複適用はスキップする。戻り値はパッチが適用されたかどうか。
     """
     global _PATCHES_APPLIED
     if _PATCHES_APPLIED:

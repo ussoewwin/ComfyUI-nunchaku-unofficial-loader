@@ -118,7 +118,7 @@ def _slot_applied_count(entry: dict) -> int:
 
 
 def _format_lora_slot_line(slot_i: int, entry: dict, include_bake: bool = False) -> str:
-    """lora_name / applied_keys / skipped_keys — always present."""
+    """lora名 / 適用キー数 / スキップキー数 — always present."""
     name = entry.get("lora_name") or "(unknown)"
     sm = entry.get("strength_model")
     sc = entry.get("strength_clip")
@@ -128,9 +128,9 @@ def _format_lora_slot_line(slot_i: int, entry: dict, include_bake: bool = False)
     skip = _slot_skip_count(entry)
     parts = [
         f"Slot {slot_i}:",
-        f"lora_name='{name}'",
-        f"applied_keys={applied} (unet={u} clip={c})",
-        f"skipped_keys={skip}",
+        f"lora名='{name}'",
+        f"適用キー数={applied} (unet={u} clip={c})",
+        f"スキップキー数={skip}",
     ]
     if sm is not None:
         parts.append(f"strength_model={sm}")
@@ -383,100 +383,36 @@ def decode_comfy_quant_conf(raw):
     raise TypeError(f"comfy_quant config must be a dict or format string, got {type(conf).__name__}")
 
 
-def resolve_int8_load_path(weight_dtype, state_dict_or_path=None) -> bool:
-    """True only when the loader UI option is exactly ``int8_tensorwise``.
-
-    No auto-detect. ``default`` / ``fp8_*`` / fp16 / bf16 / any other value
-    never enters the INT8 branch — file contents are ignored.
-    ``state_dict_or_path`` is unused (kept for call-site compatibility).
-    """
-    return str(weight_dtype or "").strip().lower() == "int8_tensorwise"
-
-
 def checkpoint_looks_like_comfy_quant_int8(state_dict_or_path) -> bool:
     """True if checkpoint has comfy_quant INT8 markers (native MixedPrecisionOps path).
 
     Accepts a loaded state_dict, or a filesystem path (probes via safetensors without full load).
-    Requires an explicit ``int8_tensorwise`` format marker (or metadata) — not
-    merely ``.comfy_quant`` presence (FP8 comfy_quant must not match).
     """
+    import torch
+
     if isinstance(state_dict_or_path, (str, os.PathLike)):
         return _probe_path_comfy_quant_int8(str(state_dict_or_path))
 
-    import torch
-
     state_dict = state_dict_or_path
+    has_marker = False
+    has_int8 = False
     for key, value in state_dict.items():
         if not torch.is_tensor(value):
             continue
         if key.endswith(".comfy_quant"):
+            has_marker = True
             conf = decode_comfy_quant_conf(value)
             if isinstance(conf, dict) and conf.get("format") == "int8_tensorwise":
                 return True
-    return False
-
-
-def _quant_config_has_int8_tensorwise(quant_config) -> bool:
-    """True when MixedPrecisionOps quant_config targets int8_tensorwise layers."""
-    if not isinstance(quant_config, dict) or not quant_config:
-        return False
-    layers = quant_config.get("layers")
-    if isinstance(layers, dict):
-        for v in layers.values():
-            if isinstance(v, str) and v == "int8_tensorwise":
-                return True
-            if isinstance(v, dict) and v.get("format") == "int8_tensorwise":
-                return True
-    # Some callers pass flat key -> format maps
-    for v in quant_config.values():
-        if isinstance(v, str) and v == "int8_tensorwise":
-            return True
-        if isinstance(v, dict) and v.get("format") == "int8_tensorwise":
-            return True
-    return False
-
-
-def _model_has_int8_comfy_quant(model) -> bool:
-    """True if diffusion/CLIP model tree has INT8 QuantizedTensor / int8_tensorwise."""
-    import torch
-
-    try:
-        from comfy.quant_ops import QuantizedTensor
-    except ImportError:
-        QuantizedTensor = ()  # type: ignore
-
-    root = getattr(model, "model", model)
-    diffusion = getattr(root, "diffusion_model", None)
-    targets = [root]
-    if diffusion is not None:
-        targets.append(diffusion)
-
-    for target in targets:
-        named = getattr(target, "named_modules", None)
-        if not callable(named):
-            continue
-        for _name, mod in named():
-            fmt = getattr(mod, "quant_format", None)
-            if fmt == "int8_tensorwise":
-                return True
-            w = getattr(mod, "weight", None)
-            if w is None:
-                continue
-            if QuantizedTensor and isinstance(w, QuantizedTensor):
-                layout = getattr(mod, "layout_type", None) or getattr(w, "layout_type", None)
-                # INT8 layouts typically expose int8 storage dtype
-                storage = getattr(w, "dtype", None)
-                if storage == torch.int8 or str(storage) in ("torch.int8", "int8"):
-                    return True
-                if layout is not None and "int8" in str(layout).lower():
-                    return True
-            elif torch.is_tensor(w) and w.dtype == torch.int8:
-                return True
-    return False
+        if key.endswith(".weight") and value.dtype == torch.int8:
+            has_int8 = True
+    return has_marker and has_int8
 
 
 def _probe_path_comfy_quant_int8(path: str) -> bool:
-    """Lightweight safetensors probe for int8_tensorwise only (not FP8 comfy_quant)."""
+    """Lightweight safetensors probe for int8_tensorwise."""
+    import torch
+
     try:
         from safetensors import safe_open
     except ImportError:
@@ -485,10 +421,17 @@ def _probe_path_comfy_quant_int8(path: str) -> bool:
         with safe_open(path, framework="pt", device="cpu") as f:
             keys = list(f.keys())
             comfy_keys = [k for k in keys if k.endswith(".comfy_quant")]
-            for ck in comfy_keys[:32]:
+            for ck in comfy_keys[:16]:
                 conf = decode_comfy_quant_conf(f.get_tensor(ck))
                 if isinstance(conf, dict) and conf.get("format") == "int8_tensorwise":
                     return True
+            if comfy_keys:
+                for k in keys:
+                    if not k.endswith(".weight"):
+                        continue
+                    if f.get_tensor(k).dtype == torch.int8:
+                        return True
+                    break
             meta = f.metadata() or {}
             if "_quantization_metadata" in meta:
                 try:
@@ -790,29 +733,11 @@ def _patch_ops_decode_and_conv() -> bool:
     # Also normalize Embedding's direct json.loads path by wrapping Embedding._load_from_state_dict
     # is covered if convert_old_quants + file markers are normalized; keep load wrapper as safety.
 
-    # mixed_precision_ops is ComfyUI's comfy_quant path (INT8). Always inject
-    # Quantized Conv2d — core only builds Linear. Gating on quant_config broke
-    # INT8 load (int8 weights → float Parameter → requires_grad error).
-    _CONV_PATCH_VER = 3
-    current_mp = getattr(ops_module, "mixed_precision_ops", None)
-    if current_mp is None or not callable(current_mp):
+    original_mp = getattr(ops_module, "mixed_precision_ops", None)
+    if original_mp is None or not callable(original_mp):
         return False
-    if (
-        getattr(current_mp, "_hswq_int8_conv_patched", False)
-        and getattr(current_mp, "_hswq_int8_conv_patch_ver", 0) >= _CONV_PATCH_VER
-    ):
+    if getattr(original_mp, "_hswq_int8_conv_patched", False):
         return True
-
-    original_mp = getattr(current_mp, "_hswq_original_mp", None)
-    if original_mp is None:
-        if getattr(current_mp, "_hswq_int8_conv_patched", False):
-            # Old gated wrapper without stored original — cannot unwrap safely.
-            logger.error(
-                "[HSWQ INT8] stale mixed_precision_ops wrap (gated Conv2d); "
-                "restart ComfyUI to reload patches"
-            )
-            return False
-        original_mp = current_mp
 
     def mixed_precision_ops_force_conv(
         quant_config=None, compute_dtype=None, full_precision_mm=False, disabled=None
@@ -836,20 +761,17 @@ def _patch_ops_decode_and_conv() -> bool:
         return result
 
     mixed_precision_ops_force_conv._hswq_int8_conv_patched = True
-    mixed_precision_ops_force_conv._hswq_int8_conv_patch_ver = _CONV_PATCH_VER
-    mixed_precision_ops_force_conv._hswq_original_mp = original_mp
     ops_module.mixed_precision_ops = mixed_precision_ops_force_conv
     return True
 
 
 def _patch_lowvram_patch_float_intermediate() -> bool:
-    """Fix LowVramPatch intermediate_dtype for INT8 weights only.
+    """Fix LowVramPatch intermediate_dtype for INT8 / QuantizedTensor weights.
 
     Upstream LowVramPatch passes intermediate_dtype=weight.dtype. When the
-    weight is still int8/Char, LoRA matmul casts to int8 and dies — same bug as
+    weight is still int8/Char (or a QuantizedTensor), LoRA matmul casts to
+    int8 and either errors or silently produces a no-op delta — same bug as
     BobJohnson24/ComfyUI-INT8-Fast#76.
-
-    FP8 / floating QuantizedTensor must use the unmodified upstream path.
     """
     try:
         import torch
@@ -863,41 +785,28 @@ def _patch_lowvram_patch_float_intermediate() -> bool:
     if LowVramPatch is None:
         return False
     original = getattr(LowVramPatch, "__call__", None)
-    if original is None:
-        return False
-    _LV_VER = 2
-    if getattr(original, "_hswq_int8_lora_dtype_ver", 0) >= _LV_VER:
-        return True
-    true_orig = getattr(original, "_hswq_orig_lowvram_call", original)
+    if original is None or getattr(original, "_hswq_int8_lora_dtype", False):
+        return getattr(original, "_hswq_int8_lora_dtype", False)
 
     def __call__(self, weight):
-        # INT8-only diversion. Everything else (FP8 QT, float8, fp16, …) → upstream.
-        is_int8_path = False
-        if isinstance(weight, QuantizedTensor):
-            storage = getattr(weight, "dtype", None)
-            is_int8_path = storage == torch.int8 or str(storage) in ("torch.int8", "int8")
-        elif torch.is_tensor(weight):
-            dtype = weight.dtype
-            is_int8_path = hasattr(dtype, "is_floating_point") and not dtype.is_floating_point
-        if not is_int8_path:
-            return true_orig(self, weight)
-
         patches = (
             self.prepared_patches
             if self.prepared_patches is not None
             else self.patches[self.key]
         )
-        w = weight.dequantize() if isinstance(weight, QuantizedTensor) else weight
+        w = weight
+        if isinstance(w, QuantizedTensor):
+            w = w.dequantize()
         dtype = getattr(w, "dtype", None)
-        if dtype is not None and hasattr(dtype, "is_floating_point") and dtype.is_floating_point:
+        if dtype is not None and hasattr(dtype, "is_floating_point") and not dtype.is_floating_point:
+            idtype = torch.float32
+        elif dtype is not None and hasattr(dtype, "is_floating_point") and dtype.is_floating_point:
             idtype = dtype
         else:
             idtype = torch.float32
         return comfy.lora.calculate_weight(patches, w, self.key, intermediate_dtype=idtype)
 
     __call__._hswq_int8_lora_dtype = True
-    __call__._hswq_int8_lora_dtype_ver = _LV_VER
-    __call__._hswq_orig_lowvram_call = true_orig
     LowVramPatch.__call__ = __call__
     return True
 
@@ -968,7 +877,6 @@ def _bake_int8_patches_on_dynamic_patcher(patcher, device_to) -> int:
     if not getattr(patcher, "patches", None):
         return 0
     try:
-        import torch
         import comfy.model_patcher as mp
         from comfy.quant_ops import QuantizedTensor
     except ImportError:
@@ -977,17 +885,6 @@ def _bake_int8_patches_on_dynamic_patcher(patcher, device_to) -> int:
     _maybe_invalidate_baked_keys(patcher)
     already = _get_baked_key_set(patcher.model)
     baked = 0
-
-    def _is_int8_weight(weight) -> bool:
-        if weight is None:
-            return False
-        if isinstance(weight, QuantizedTensor):
-            storage = getattr(weight, "dtype", None)
-            return storage == torch.int8 or str(storage) in ("torch.int8", "int8")
-        if torch.is_tensor(weight):
-            return weight.dtype == torch.int8
-        return False
-
     for name, module in patcher.model.named_modules():
         keys_to_bake = []
         for param_key in ("weight", "bias"):
@@ -1005,10 +902,11 @@ def _bake_int8_patches_on_dynamic_patcher(patcher, device_to) -> int:
                     pass
                 continue
             weight, set_func, convert_func = mp.get_key_weight(patcher.model, key)
-            if weight is None or not _is_int8_weight(weight):
-                # FP8 / float set_weight modules must not enter INT8 bake.
+            if weight is None:
                 continue
             is_qt = isinstance(weight, QuantizedTensor)
+            # Bake when requant hooks exist (Linear/Conv INT8), or QT without
+            # set_func would still be broken — skip those and log below.
             if set_func is None:
                 if is_qt:
                     _console(
@@ -1061,7 +959,7 @@ def _patch_model_patcher_dynamic_int8_lora_bake() -> bool:
     original = getattr(Dynamic, "load", None)
     if original is None:
         return False
-    _DYN_VER = 5
+    _DYN_VER = 4
     if getattr(original, "_hswq_int8_lora_bake_ver", 0) >= _DYN_VER:
         return True
     true_orig = getattr(original, "_hswq_orig_dynamic_load", original)
@@ -1075,9 +973,6 @@ def _patch_model_patcher_dynamic_int8_lora_bake() -> bool:
             full_load=full_load,
             dirty=dirty,
         )
-        # INT8-only bake: never touch FP8 / float MixedPrecisionOps models.
-        if not _model_has_int8_comfy_quant(self.model):
-            return result
         # Load re-attaches LowVramPatch for any keys still in patches / clones
         _strip_lowvram_for_baked_keys(self)
         if self.patches:
@@ -1097,32 +992,17 @@ def _patch_model_patcher_dynamic_int8_lora_bake() -> bool:
 
 
 def _patch_model_patcher_lora_logs() -> bool:
-    """Log INT8 LoRA bake path only. FP8 ModelPatcher uses upstream unchanged."""
+    """Log whether LoRA bake uses set_weight (requant) or int8_round fallback."""
     try:
         import comfy.model_patcher as mp
     except ImportError:
         return False
 
     original = getattr(mp.ModelPatcher, "patch_weight_to_device", None)
-    if original is None:
-        return False
-    _LOG_VER = 2
-    if getattr(original, "_hswq_int8_lora_log_ver", 0) >= _LOG_VER:
-        return True
-    true_orig = getattr(original, "_hswq_orig_patch_weight", original)
+    if original is None or getattr(original, "_hswq_int8_lora_log", False):
+        return getattr(original, "_hswq_int8_lora_log", False)
 
     def patch_weight_to_device_logged(self, key, device_to=None, inplace_update=False, return_weight=False, force_cast=False):
-        # FP8 / non-INT8: identical to pre-INT8 ModelPatcher (d57fbe9).
-        if not _model_has_int8_comfy_quant(self.model):
-            return true_orig(
-                self,
-                key,
-                device_to=device_to,
-                inplace_update=inplace_update,
-                return_weight=return_weight,
-                force_cast=force_cast,
-            )
-
         global _lora_patcher_logs
         weight, set_func, convert_func = mp.get_key_weight(self.model, key)
         if key in self.patches:
@@ -1156,9 +1036,11 @@ def _patch_model_patcher_lora_logs() -> bool:
                     f"convert={'yes' if convert_func else 'no'} "
                     f"set={'yes' if set_func else 'no'}{warn}"
                 )
+            # After stacked UNet keys are baked, dump per-LoRA summary once
             target = sum(int(e.get("applied_unet") or 0) for e in _lora_attach_history)
             if target <= 0:
                 target = int(_lora_attach_last.get("applied_unet") or 0)
+            # Unique baked keys may be less than sum (shared keys across LoRAs)
             unique_target = len(
                 {
                     k
@@ -1171,9 +1053,11 @@ def _patch_model_patcher_lora_logs() -> bool:
                 and _lora_patcher_stats["calls"] >= unique_target
                 and not getattr(dump_int8_lora_bake_stats, "_dumped_this_load", False)
             ):
+                # Do NOT set the flag before dump (that made dump a no-op).
                 dump_int8_lora_bake_stats(force=False)
 
-        return true_orig(
+
+        return original(
             self,
             key,
             device_to=device_to,
@@ -1183,8 +1067,6 @@ def _patch_model_patcher_lora_logs() -> bool:
         )
 
     patch_weight_to_device_logged._hswq_int8_lora_log = True
-    patch_weight_to_device_logged._hswq_int8_lora_log_ver = _LOG_VER
-    patch_weight_to_device_logged._hswq_orig_patch_weight = true_orig
     mp.ModelPatcher.patch_weight_to_device = patch_weight_to_device_logged
     return True
 
@@ -1219,7 +1101,7 @@ def _per_lora_bake_verdict(entry: dict) -> tuple[str, int, int, int]:
 
 
 def dump_int8_lora_bake_stats(force: bool = False) -> None:
-    """Full Status dump: lora_name / applied_keys / skipped_keys (+ bake if any)."""
+    """Full Status dump: lora名 / 適用キー数 / スキップキー数 (+ bake if any)."""
     if not force and getattr(dump_int8_lora_bake_stats, "_dumped_this_load", False):
         return
     dump_int8_lora_bake_stats._dumped_this_load = True
@@ -1232,7 +1114,7 @@ def dump_int8_lora_bake_stats(force: bool = False) -> None:
     _lora_line(f"[HSWQ LoRA Status] ===== bake summary ({n} slot(s)) =====")
     if not history:
         _lora_line(
-            "[HSWQ LoRA Status] Slot -: | lora_name='(none)' | applied_keys=0 | skipped_keys=0 | → SKIPPED ✗"
+            "[HSWQ LoRA Status] Slot -: | lora名='(none)' | 適用キー数=0 | スキップキー数=0 | → SKIPPED ✗"
         )
     ok_n = 0
     for i, a in enumerate(history, 1):
@@ -1375,6 +1257,7 @@ def _patch_load_lora_key_counts() -> bool:
     try:
         import comfy.lora as lora_mod
         import comfy.sd as sd_mod
+        import comfy.weight_adapter as weight_adapter
     except ImportError:
         return False
 
@@ -1383,7 +1266,7 @@ def _patch_load_lora_key_counts() -> bool:
     if orig_load_lora is None or orig_for_models is None:
         return False
 
-    _KEY_VER = 7
+    _KEY_VER = 6
     if getattr(orig_for_models, "_hswq_lora_key_count_ver", 0) >= _KEY_VER:
         _patch_lora_loader_name_context()
         _patch_loras_folder_path_name()
@@ -1400,11 +1283,73 @@ def _patch_load_lora_key_counts() -> bool:
     _ctx = {"patch_dict": {}, "not_mapped": [], "file_keys": 0}
 
     def load_lora_counted(lora, to_load, log_missing=True):
-        # Always use upstream load_lora (d57fbe9 / ComfyUI). Do not reimplement.
-        patch_dict = orig_load_lora(lora, to_load, log_missing=log_missing)
+        patch_dict = {}
+        loaded_keys = set()
+        for x in to_load:
+            alpha_name = "{}.alpha".format(x)
+            alpha = None
+            if alpha_name in lora.keys():
+                alpha = lora[alpha_name].item()
+                loaded_keys.add(alpha_name)
+
+            dora_scale_name = "{}.dora_scale".format(x)
+            dora_scale = None
+            if dora_scale_name in lora.keys():
+                dora_scale = lora[dora_scale_name]
+                loaded_keys.add(dora_scale_name)
+
+            for adapter_cls in weight_adapter.adapters:
+                adapter = adapter_cls.load(x, lora, alpha, dora_scale, loaded_keys)
+                if adapter is not None:
+                    patch_dict[to_load[x]] = adapter
+                    loaded_keys.update(adapter.loaded_keys)
+                    continue
+
+            w_norm_name = "{}.w_norm".format(x)
+            b_norm_name = "{}.b_norm".format(x)
+            w_norm = lora.get(w_norm_name, None)
+            b_norm = lora.get(b_norm_name, None)
+
+            if w_norm is not None:
+                loaded_keys.add(w_norm_name)
+                patch_dict[to_load[x]] = ("diff", (w_norm,))
+                if b_norm is not None:
+                    loaded_keys.add(b_norm_name)
+                    patch_dict["{}.bias".format(to_load[x][: -len(".weight")])] = (
+                        "diff",
+                        (b_norm,),
+                    )
+
+            diff_name = "{}.diff".format(x)
+            diff_weight = lora.get(diff_name, None)
+            if diff_weight is not None:
+                patch_dict[to_load[x]] = ("diff", (diff_weight,))
+                loaded_keys.add(diff_name)
+
+            diff_bias_name = "{}.diff_b".format(x)
+            diff_bias = lora.get(diff_bias_name, None)
+            if diff_bias is not None:
+                patch_dict["{}.bias".format(to_load[x][: -len(".weight")])] = (
+                    "diff",
+                    (diff_bias,),
+                )
+                loaded_keys.add(diff_bias_name)
+
+            set_weight_name = "{}.set_weight".format(x)
+            set_weight = lora.get(set_weight_name, None)
+            if set_weight is not None:
+                patch_dict[to_load[x]] = ("set", (set_weight,))
+                loaded_keys.add(set_weight_name)
+
+        not_mapped = [x for x in lora.keys() if x not in loaded_keys]
         _ctx["patch_dict"] = patch_dict
-        _ctx["not_mapped"] = []
+        _ctx["not_mapped"] = not_mapped
         _ctx["file_keys"] = len(lora) if hasattr(lora, "keys") else 0
+
+        if log_missing:
+            for x in not_mapped:
+                logging.warning("lora key not loaded: {}".format(x))
+
         return patch_dict
 
     def load_lora_for_models_counted(
@@ -1413,15 +1358,6 @@ def _patch_load_lora_key_counts() -> bool:
         new_model, new_clip = orig_for_models(
             model, clip, lora, strength_model, strength_clip, lora_metadata
         )
-        # Status / attach history: INT8 models only. FP8 path stays silent like d57fbe9.
-        model_obj = None
-        if new_model is not None:
-            model_obj = getattr(new_model, "model", None)
-        if model_obj is None and model is not None:
-            model_obj = getattr(model, "model", None)
-        if not _model_has_int8_comfy_quant(model_obj):
-            return (new_model, new_clip)
-
         loaded = _ctx.get("patch_dict") or {}
         not_mapped = list(_ctx.get("not_mapped") or [])
         file_key_count = int(_ctx.get("file_keys") or 0)
@@ -1485,11 +1421,7 @@ def _patch_load_lora_key_counts() -> bool:
 
 
 def apply_comfy_quant_int8_patches() -> bool:
-    """Install INT8 comfy_quant patches once. Returns True if applied (or already applied).
-
-    Always (re)ensures LoRA-related wraps are present even if ops were applied earlier,
-    so separation / re-entry cannot drop Dynamic INT8 LoRA bake.
-    """
+    """Install INT8 comfy_quant patches once. Returns True if applied (or already applied)."""
     global _PATCHES_APPLIED
     ok_keys = _patch_load_lora_key_counts()
     ok_name = _patch_lora_loader_name_context()
@@ -1497,17 +1429,11 @@ def apply_comfy_quant_int8_patches() -> bool:
     ok_torch = _patch_load_torch_file_lora_name()
     ok_lowvram = _patch_lowvram_patch_float_intermediate()
     ok_dyn_bake = _patch_model_patcher_dynamic_int8_lora_bake()
-    ok_lora_log = _patch_model_patcher_lora_logs()
-    # Always (re)ensure ops Conv2d wrap — gated v2 left MixedPrecisionOps.Conv2d
-    # as float and INT8 load crashed with requires_grad on int8.
-    ok_ops = _patch_ops_decode_and_conv()
     if _PATCHES_APPLIED:
-        if not ok_dyn_bake:
-            logger.error("[HSWQ INT8] Dynamic LoRA bake wrap missing after re-entry")
-        if not ok_ops:
-            logger.error("[HSWQ INT8] Conv2d MixedPrecisionOps wrap missing after re-entry")
-        return bool(ok_ops)
+        return True
     ok_utils = _patch_convert_old_quants()
+    ok_ops = _patch_ops_decode_and_conv()
+    ok_lora_log = _patch_model_patcher_lora_logs()
     if ok_ops:
         _PATCHES_APPLIED = True
         _console(
@@ -1529,120 +1455,111 @@ def apply_comfy_quant_int8_patches() -> bool:
     return False
 
 
-def load_unet_int8(unet_path: str, unet_name: str = ""):
-    """INT8 UNet load path. Call only from a node when weight_dtype is int8_tensorwise."""
-    apply_comfy_quant_int8_patches()
-    reset_int8_lora_log_counters()
-    label = unet_name or unet_path
-    logging.info("[HSWQ INT8] Loading UNet via MixedPrecisionOps (int8_tensorwise / comfy_quant)")
-    print(f"[HSWQ INT8] Loading UNet: {label}", flush=True)
-    import comfy.sd as sd_mod
-
-    model = sd_mod.load_diffusion_model(unet_path, model_options={})
-    summarize_int8_lora_capability(model)
-    return model
-
-
-def load_checkpoint_int8(ckpt_path: str, ckpt_name: str = ""):
-    """INT8 checkpoint load path. Call only from a node when weight_dtype is int8_tensorwise."""
-    apply_comfy_quant_int8_patches()
-    reset_int8_lora_log_counters()
-    label = ckpt_name or ckpt_path
-    logging.info("[HSWQ INT8] Loading checkpoint via MixedPrecisionOps (int8_tensorwise / comfy_quant)")
-    print(f"[HSWQ INT8] Loading checkpoint: {label}", flush=True)
+def load_unet_hswq_weight_dtype(unet_name, weight_dtype):
+    import logging
+    import torch
     import folder_paths
-    import comfy.sd as sd_mod
+    import comfy.sd
 
-    out = sd_mod.load_checkpoint_guess_config(
-        ckpt_path,
-        output_vae=False,
-        output_clip=True,
-        embedding_directory=folder_paths.get_folder_paths("embeddings"),
-        model_options={},
-    )
-    model, clip = out[0], out[1]
-    summarize_int8_lora_capability(model)
-    return model, clip
+    # INT8 Conv2d + comfy_quant decode patches (core only handles Linear).
+    apply_comfy_quant_int8_patches()
+
+    unet_path = folder_paths.get_full_path_or_raise("diffusion_models", unet_name)
+
+    # Auto-detect native comfy_quant INT8 UNet; do not force float8 dtype over int8 weights.
+    is_int8 = weight_dtype == "int8_tensorwise" or checkpoint_looks_like_comfy_quant_int8(unet_path)
+
+    if is_int8:
+        model_options = {}
+        reset_int8_lora_log_counters()
+        logging.info("[HSWQ INT8] Loading UNet via MixedPrecisionOps (int8_tensorwise / comfy_quant)")
+        print(f"[HSWQ INT8] Loading UNet: {unet_name}", flush=True)
+    else:
+        model_options = {}
+        if weight_dtype == "fp8_e4m3fn":
+            model_options["dtype"] = torch.float8_e4m3fn
+        elif weight_dtype == "fp8_e4m3fn_fast":
+            model_options["dtype"] = torch.float8_e4m3fn
+            model_options["fp8_optimizations"] = True
+        elif weight_dtype == "fp8_e5m2":
+            model_options["dtype"] = torch.float8_e5m2
+
+    model = comfy.sd.load_diffusion_model(unet_path, model_options=model_options)
+    if is_int8:
+        summarize_int8_lora_capability(model)
+
+    return (model,)
+
+
+def load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device=None):
+    import sys
+    import torch
+    import folder_paths
+    import comfy.sd
+
+    pkg = sys.modules[__name__.rsplit(".", 2)[0]]
+    get_current_device = pkg.get_current_device
+    set_current_device = pkg.set_current_device
+    sdxl_logger = pkg.sdxl_logger
+
+    original_device = get_current_device()
+    if device is not None:
+        set_current_device(device)
+    try:
+        # INT8 Conv2d + comfy_quant decode (core only handles Linear).
+        apply_comfy_quant_int8_patches()
+
+        ckpt_path = folder_paths.get_full_path_or_raise("checkpoints", ckpt_name)
+        # Auto-detect native comfy_quant INT8; do not force float8 dtype over int8 weights.
+        is_int8 = weight_dtype == "int8_tensorwise" or checkpoint_looks_like_comfy_quant_int8(ckpt_path)
+
+        model_options = {}
+        if is_int8:
+            reset_int8_lora_log_counters()
+            sdxl_logger.info(
+                "[SDXL INT8] Loading checkpoint via MixedPrecisionOps "
+                "(int8_tensorwise / comfy_quant): %s",
+                ckpt_name,
+            )
+        elif weight_dtype == "fp8_e4m3fn":
+            model_options["dtype"] = torch.float8_e4m3fn
+        elif weight_dtype == "fp8_e4m3fn_fast":
+            model_options["dtype"] = torch.float8_e4m3fn
+            model_options["fp8_optimizations"] = True
+        elif weight_dtype == "fp8_e5m2":
+            model_options["dtype"] = torch.float8_e5m2
+
+        out = comfy.sd.load_checkpoint_guess_config(
+            ckpt_path,
+            output_vae=False,
+            output_clip=True,
+            embedding_directory=folder_paths.get_folder_paths("embeddings"),
+            model_options=model_options,
+        )
+        model, clip, _v = out[:3]
+        if is_int8:
+            summarize_int8_lora_capability(model)
+        return (model, clip)
+    finally:
+        set_current_device(original_device)
 
 
 def install_int8_option_dispatch(node_class_mappings) -> bool:
-    """Route weight_dtype==int8_tensorwise to full INT8 load (patches + LoRA bake).
-
-    Loader *source* stays d57fbe9 except the option string; wrap lives only here.
-    INT8 LoRA (Dynamic bake / Status / Conv2d set_weight) is unchanged from the
-    pre-separation path: load_*_int8 → apply_comfy_quant_int8_patches().
-    """
     if not isinstance(node_class_mappings, dict):
-        logger.error("[HSWQ INT8] option dispatch: NODE_CLASS_MAPPINGS missing")
         return False
 
-    installed_names = []
+    apply_comfy_quant_int8_patches()
 
     unet_cls = node_class_mappings.get("HSWQFP8E4M3UNetLoader")
-    if unet_cls is not None and not getattr(unet_cls, "_hswq_int8_dispatch", False):
-        _orig_unet = unet_cls.load_unet
-
+    if unet_cls is not None:
         def load_unet(self, unet_name, weight_dtype):
-            if weight_dtype == "int8_tensorwise":
-                import folder_paths
-
-                unet_path = folder_paths.get_full_path_or_raise("diffusion_models", unet_name)
-                return (load_unet_int8(unet_path, unet_name),)
-            return _orig_unet(self, unet_name, weight_dtype)
-
+            return load_unet_hswq_weight_dtype(unet_name, weight_dtype)
         unet_cls.load_unet = load_unet
-        unet_cls._hswq_int8_dispatch = True
-        installed_names.append("HSWQFP8E4M3UNetLoader")
 
     sdxl_cls = node_class_mappings.get("NunchakuUssoewwinCheckpointLoaderSDXL")
-    if sdxl_cls is not None and not getattr(sdxl_cls, "_hswq_int8_dispatch", False):
-        _orig_ckpt = sdxl_cls.load_checkpoint
-
+    if sdxl_cls is not None:
         def load_checkpoint(self, ckpt_name, weight_dtype, device=None):
-            if weight_dtype != "int8_tensorwise":
-                return _orig_ckpt(self, ckpt_name, weight_dtype, device)
-
-            import folder_paths
-
-            g = getattr(_orig_ckpt, "__globals__", {}) or {}
-            get_current_device = g.get("get_current_device")
-            set_current_device = g.get("set_current_device")
-
-            if get_current_device is None or set_current_device is None:
-                ckpt_path = folder_paths.get_full_path_or_raise("checkpoints", ckpt_name)
-                model, clip = load_checkpoint_int8(ckpt_path, ckpt_name)
-                return (model, clip)
-
-            original_device = get_current_device()
-            if device is not None:
-                set_current_device(device)
-            try:
-                ckpt_path = folder_paths.get_full_path_or_raise("checkpoints", ckpt_name)
-                model, clip = load_checkpoint_int8(ckpt_path, ckpt_name)
-                return (model, clip)
-            finally:
-                set_current_device(original_device)
-
+            return load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device)
         sdxl_cls.load_checkpoint = load_checkpoint
-        sdxl_cls._hswq_int8_dispatch = True
-        installed_names.append("NunchakuUssoewwinCheckpointLoaderSDXL")
 
-    missing = []
-    if node_class_mappings.get("HSWQFP8E4M3UNetLoader") is None:
-        missing.append("HSWQFP8E4M3UNetLoader")
-    elif not getattr(node_class_mappings["HSWQFP8E4M3UNetLoader"], "_hswq_int8_dispatch", False):
-        missing.append("HSWQFP8E4M3UNetLoader(wrap)")
-    if node_class_mappings.get("NunchakuUssoewwinCheckpointLoaderSDXL") is None:
-        missing.append("NunchakuUssoewwinCheckpointLoaderSDXL")
-    elif not getattr(node_class_mappings["NunchakuUssoewwinCheckpointLoaderSDXL"], "_hswq_int8_dispatch", False):
-        missing.append("NunchakuUssoewwinCheckpointLoaderSDXL(wrap)")
-
-    if missing:
-        logger.error("[HSWQ INT8] option dispatch incomplete; missing=%s", missing)
-        return False
-
-    logging.info(
-        "[HSWQ INT8] option dispatch OK (%s) — int8_tensorwise keeps full patches+LoRA bake",
-        ", ".join(installed_names) if installed_names else "already installed",
-    )
     return True

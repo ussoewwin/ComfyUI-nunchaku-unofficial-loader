@@ -331,6 +331,14 @@ try:
 except Exception as e:
     logger.debug("HSWQ PinDebug: not installed: %s", e)
 
+# Native comfy_quant INT8 (int8_tensorwise): Conv2d quant load + comfy_quant decode
+# (ComfyUI core MixedPrecisionOps only covers Linear; SD UNet INT8 needs Conv2d.)
+try:
+    from .patches.comfy_quant_int8 import apply_comfy_quant_int8_patches
+    apply_comfy_quant_int8_patches()
+except Exception as e:
+    logger.debug("HSWQ INT8 comfy_quant patches not applied: %s", e)
+
 # HSWQ&Nunchaku Ultimate SD Upscale: apply copy_ / FP8 bias / embedder / Lumina compat patches in this extension
 try:
     from .usdu_compat_patches import apply_usdu_compat_patches
@@ -915,14 +923,11 @@ try:
 except (ImportError, ModuleNotFoundError) as e:
     logger.debug("HSWQ FP8 E4M3 UNet Loader not registered: %s", e)
 
-# INT8 option dispatch (implementation lives only in patches/comfy_quant_int8.py).
-# Must not fail silently — INT8 + LoRA bake depends on this wrap.
 try:
     from .patches.comfy_quant_int8 import install_int8_option_dispatch
-    if not install_int8_option_dispatch(NODE_CLASS_MAPPINGS):
-        logger.error("[HSWQ INT8] option dispatch failed — int8_tensorwise / LoRA bake may be broken")
+    install_int8_option_dispatch(NODE_CLASS_MAPPINGS)
 except Exception as e:
-    logger.exception("[HSWQ INT8] option dispatch raised: %s", e)
+    logger.exception("[HSWQ INT8] install_int8_option_dispatch: %s", e)
 
 # HSWQ Batched Detailer (SEGS) - phase-split version to minimize model switching
 try:
