@@ -41,7 +41,8 @@ fp8e4m3-based SDXL models, compression scripts, and related technical documentat
 
 The fp8e4m3 development is **[Hybrid-Sensitivity-Weighted-Quantization (HSWQ)](https://github.com/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization)**. HSWQ is a novel FP8 E4M3 quantization method that combines sensitivity analysis and importance-weighted histogram optimization, achieving superior quality compared to naive uniform quantization while maintaining standard loader compatibility.
 
-- **Quantized HSWQ SDXL models:** [Hugging Face — Hybrid-Sensitivity-Weighted-Quantization-SDXL-fp8e4m3](https://huggingface.co/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization-SDXL-fp8e4m3)
+- **Quantized HSWQ SDXL models (FP8):** [Hugging Face — Hybrid-Sensitivity-Weighted-Quantization-SDXL-fp8e4m3](https://huggingface.co/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization-SDXL-fp8e4m3)
+- **Quantized HSWQ SDXL models (INT8):** [Hugging Face — Hybrid-Sensitivity-Weighted-Quantization-SDXL-INT8](https://huggingface.co/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization-SDXL-INT8)
 
 <p align="center">
 <img src="https://raw.githubusercontent.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/main/logo.png" width="400">
