@@ -415,6 +415,26 @@ def deactivate() -> None:
     )
 
 
+def purge_pin_cache() -> int:
+    """Force-drain every pooled pin buffer. Returns bytes held before drain."""
+    global _PIN_CACHE_TOTAL, _active, _depth
+    before = int(_PIN_CACHE_TOTAL)
+    _active = False
+    _depth = 0
+    if _pm_mod is not None:
+        try:
+            _pm_mod._hswq_pin_cache_active = False
+        except Exception:
+            pass
+    try:
+        _uninstall_patches()
+    except Exception:
+        pass
+    _drain_pool()
+    _logger.info("[HSWQ PinCache] PURGE drained %.1f MB", before / (1024 * 1024))
+    return before
+
+
 @contextmanager
 def hswq_pin_cache_scope():
     """Context manager: PinCache on only for Batched Detailer."""
