@@ -16,9 +16,11 @@ Applied from ComfyUI-nunchaku-unofficial-loader so ComfyUI core updates do not w
 """
 from __future__ import annotations
 
+import contextlib
 import json
 import logging
 import os
+import threading
 
 logger = logging.getLogger(__name__)
 _PATCHES_APPLIED = False
@@ -524,6 +526,28 @@ def _quant_config_has_int8_tensorwise(quant_config) -> bool:
     return False
 
 
+# INT8 Conv2d inject must NOT run for FP MixedPrecisionOps.
+# detect_layer_quantization() only returns {"mixed_ops": True} for both INT8 and FP8,
+# so we gate Conv2d injection on this load-scoped flag (set only in INT8 load helpers).
+_int8_quant_conv_tls = threading.local()
+
+
+@contextlib.contextmanager
+def _int8_quant_conv_scope():
+    prev = getattr(_int8_quant_conv_tls, "active", False)
+    _int8_quant_conv_tls.active = True
+    try:
+        yield
+    finally:
+        _int8_quant_conv_tls.active = prev
+
+
+def _should_inject_int8_conv(quant_config) -> bool:
+    if getattr(_int8_quant_conv_tls, "active", False):
+        return True
+    return _quant_config_has_int8_tensorwise(quant_config)
+
+
 def _model_has_int8_quantized_weights(model) -> bool:
     """True if model already carries INT8 / QuantizedTensor weights (post-load)."""
     try:
@@ -787,9 +811,10 @@ def _patch_ops_decode_and_conv() -> bool:
             full_precision_mm=full_precision_mm,
             disabled=disabled,
         )
-        # Only inject INT8 Conv2d when this ops factory is for int8_tensorwise.
-        # Never rewrite Conv2d for FP8 / Nunchaku / other MixedPrecision paths.
-        if _quant_config_has_int8_tensorwise(quant_config):
+        # Inject Quantized Conv2d only during INT8 load scope (or explicit
+        # int8_tensorwise quant_config). FP MixedPrecisionOps must keep upstream
+        # Conv2d — detect_layer_quantization() is {"mixed_ops": True} for both.
+        if _should_inject_int8_conv(quant_config):
             result.Conv2d = _make_quantized_conv2d(ops_module, result, disabled)
         return result
 
@@ -1510,6 +1535,9 @@ def load_unet_hswq_weight_dtype(unet_name, weight_dtype):
         reset_int8_lora_log_counters()
         logging.info("[HSWQ INT8] Loading UNet via MixedPrecisionOps (int8_tensorwise / comfy_quant)")
         print(f"[HSWQ INT8] Loading UNet: {unet_name}", flush=True)
+        with _int8_quant_conv_scope():
+            model = comfy.sd.load_diffusion_model(unet_path, model_options=model_options)
+        summarize_int8_lora_capability(model)
     else:
         model_options = {}
         if weight_dtype == "fp8_e4m3fn":
@@ -1519,10 +1547,7 @@ def load_unet_hswq_weight_dtype(unet_name, weight_dtype):
             model_options["fp8_optimizations"] = True
         elif weight_dtype == "fp8_e5m2":
             model_options["dtype"] = torch.float8_e5m2
-
-    model = comfy.sd.load_diffusion_model(unet_path, model_options=model_options)
-    if is_int8:
-        summarize_int8_lora_capability(model)
+        model = comfy.sd.load_diffusion_model(unet_path, model_options=model_options)
 
     return (model,)
 
@@ -1556,7 +1581,19 @@ def load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device=None)
                 "(int8_tensorwise / comfy_quant): %s",
                 ckpt_name,
             )
-        elif weight_dtype == "fp8_e4m3fn":
+            with _int8_quant_conv_scope():
+                out = comfy.sd.load_checkpoint_guess_config(
+                    ckpt_path,
+                    output_vae=False,
+                    output_clip=True,
+                    embedding_directory=folder_paths.get_folder_paths("embeddings"),
+                    model_options=model_options,
+                )
+            model, clip, _v = out[:3]
+            summarize_int8_lora_capability(model)
+            return (model, clip)
+
+        if weight_dtype == "fp8_e4m3fn":
             model_options["dtype"] = torch.float8_e4m3fn
         elif weight_dtype == "fp8_e4m3fn_fast":
             model_options["dtype"] = torch.float8_e4m3fn
@@ -1572,8 +1609,6 @@ def load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device=None)
             model_options=model_options,
         )
         model, clip, _v = out[:3]
-        if is_int8:
-            summarize_int8_lora_capability(model)
         return (model, clip)
     finally:
         set_current_device(original_device)
