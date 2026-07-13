@@ -1,8 +1,8 @@
 """
-HSWQ Z-Image-Turbo FP8(E4M3) 専用ローダー。
+HSWQ Z-Image-Turbo FP8(E4M3) dedicated loader.
 
-Nunchaku 本体用の `nodes/models/zimage.py` には一切手を入れず、
-FP8 で動かしたいときだけ、この別ファイルのノードを使う。
+Does not modify upstream Nunchaku `nodes/models/zimage.py`.
+Use this separate node only when you want FP8.
 """
 
 from __future__ import annotations
@@ -20,11 +20,11 @@ logger = logging.getLogger(__name__)
 
 class HSWQZImageFP8E4M3DiTLoader:
     """
-    HSWQ Z-Image-Turbo FP8(E4M3) 専用ローダー。
+    HSWQ Z-Image-Turbo FP8(E4M3) dedicated loader.
 
-    - Nunchaku 用 `nodes/models/zimage.py` には触れない
-    - クラス名／ノード名は Nunchaku ではなく HSWQ
-    - 実際のロード処理は元の `load_diffusion_model_state_dict` を使い回す
+    - Does not touch Nunchaku `nodes/models/zimage.py`
+    - Class/node names are HSWQ, not Nunchaku
+    - Reuses upstream `load_diffusion_model_state_dict` for loading
     """
 
     @classmethod
@@ -75,8 +75,8 @@ class HSWQZImageFP8E4M3DiTLoader:
             cpu_offload_enabled = False
             logger.info("[HSWQ] Disabling CPU offload")
 
-        # Nunchaku 側の load_diffusion_model_state_dict をそのまま使う。
-        # FP8 最適化の有無などは、元の実装（metadata / quantization_config）に従う。
+        # Use Nunchaku-side load_diffusion_model_state_dict as-is.
+        # FP8 optimization follows upstream (metadata / quantization_config).
         model = load_diffusion_model_state_dict(
             sd, metadata=metadata, model_options={"cpu_offload_enabled": cpu_offload_enabled}
         )

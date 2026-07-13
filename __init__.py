@@ -150,12 +150,12 @@ mm.unet_offload_device = unet_offload_device_patched
 from .utils import get_package_version, get_plugin_version
 
 # -------------------------------------------------------------------------
-# HSWQ Pin Cache: comfy.pinned_memory の pin_memory / unpin_memory を
-# monkey-patch し、cudaHostRegister/Unregister の繰り返しを回避する。
+# HSWQ Pin Cache: monkey-patch comfy.pinned_memory pin_memory / unpin_memory
+# to avoid repeated cudaHostRegister / Unregister.
 #
-# FaceDetailer 等でモデルが UNet → VAE → UNet と切り替わるたび、
-# 全 weight の pin バッファが破棄・再作成されるのを防ぐ。
-# unpin 時にバッファをキャッシュし、再 pin 時に再利用する。
+# When FaceDetailer (etc.) switches UNet → VAE → UNet, this prevents
+# destroying and recreating pin buffers for every weight.
+# On unpin, buffers are cached and reused on the next pin.
 # -------------------------------------------------------------------------
 try:
     import collections
@@ -287,9 +287,9 @@ except Exception as e:
     logger.debug("HSWQ PinCache: not installed: %s", e)
 
 # -------------------------------------------------------------------------
-# HSWQ PinDebug: comfy.model_management.pin_memory 呼び出しの実態をログに出す
-# (PinCache がキャッシュヒットした場合は model_management.pin_memory を
-#  呼ばないため、このログにはキャッシュミス時のみ出力される)
+# HSWQ PinDebug: log real calls to comfy.model_management.pin_memory
+# (on PinCache hit, model_management.pin_memory is not called, so this
+#  log only appears on cache miss)
 # -------------------------------------------------------------------------
 try:
     import inspect
@@ -331,14 +331,6 @@ try:
 except Exception as e:
     logger.debug("HSWQ PinDebug: not installed: %s", e)
 
-# Native comfy_quant INT8 (int8_tensorwise): Conv2d quant load + comfy_quant decode
-# (ComfyUI core MixedPrecisionOps only covers Linear; SD UNet INT8 needs Conv2d.)
-try:
-    from .patches.comfy_quant_int8 import apply_comfy_quant_int8_patches
-    apply_comfy_quant_int8_patches()
-except Exception as e:
-    logger.debug("HSWQ INT8 comfy_quant patches not applied: %s", e)
-
 # HSWQ&Nunchaku Ultimate SD Upscale: apply copy_ / FP8 bias / embedder / Lumina compat patches in this extension
 try:
     from .usdu_compat_patches import apply_usdu_compat_patches
@@ -346,16 +338,15 @@ try:
 except Exception as e:
     logger.debug("USDU compat patches not applied: %s", e)
 
-# torch.compile + FP8 + Lumina/Flux + comfy_kitchen 互換パッチ
-# NunchakuFluxLoraStacker のパッチモジュールから安全なパッチのみ選択適用:
-#   - LoraDiff.calculate_weight: reshape != weight.shape の LoRA をスキップ (根本対策)
-#   - lumina.modulate / apply_gate: hidden_dim 不一致時の安全フォールバック
+# torch.compile + FP8 + Lumina/Flux + comfy_kitchen compatibility patches.
+# Apply only safe patches from NunchakuFluxLoraStacker patch module:
+#   - LoraDiff.calculate_weight: skip LoRA when reshape != weight.shape (root fix)
+#   - lumina.modulate / apply_gate: safe fallback on hidden_dim mismatch
 #
-# 注意: グローバルな F.linear / matmul / mul / add パッチは適用しない。
-# これらは RuntimeError をキャッチしてテンソルをスライスするが、ComfyUI 本体が
-# 同じ RuntimeError を使って不正な LoRA を検出・スキップしているため、
-# グローバルパッチが ComfyUI のエラーハンドリングを横取りし、壊れた次元の
-# テンソルが後続の RMSNorm 等でクラッシュを引き起こす。
+# Note: do NOT apply global F.linear / matmul / mul / add patches.
+# Those catch RuntimeError and slice tensors, but ComfyUI core uses the same
+# RuntimeError to detect and skip bad LoRA; a global patch would steal that
+# handling and can crash later (e.g. RMSNorm) with broken ranks.
 try:
     import importlib
     _lora_stacker_patches = None
@@ -372,7 +363,7 @@ try:
 
     _applied = []
     if _lora_stacker_patches:
-        # LoRA reshape != weight.shape をスキップ (根本対策: 不正 LoRA の適用を防ぐ)
+        # Skip LoRA when reshape != weight.shape (root fix: block bad LoRA)
         _fn = getattr(_lora_stacker_patches, "_apply_lumina_modulate_patch", None)
         if _fn and _fn():
             _applied.append("lumina.modulate")
@@ -380,7 +371,7 @@ try:
         if _fn and _fn():
             _applied.append("lumina.apply_gate")
 
-        # LoraDiff.calculate_weight パッチは apply_patches() 末尾にあるため直接適用
+        # LoraDiff.calculate_weight patch lives at end of apply_patches(); apply directly
         try:
             import comfy.weight_adapter.lora as _lora_mod
             _LoraDiff = getattr(_lora_mod, "LoraDiff", None)
@@ -801,43 +792,23 @@ try:
             OUTPUT_TOOLTIPS = ("The UNet diffusion model from checkpoint.", "The CLIP model from the SDXL checkpoint.")
             FUNCTION = "load_checkpoint"
             CATEGORY = "loaders"
-            TITLE = "HSWQ Checkpoint Loader (SDXL)"
+            TITLE = "Checkpoint Loader (SDXL)"
 
             def load_checkpoint(self, ckpt_name, weight_dtype, device=None):
-                from .patches.comfy_quant_int8 import (
-                    apply_comfy_quant_int8_patches,
-                    checkpoint_looks_like_comfy_quant_int8,
-                    reset_int8_lora_log_counters,
-                    summarize_int8_lora_capability,
-                )
-
                 original_device = get_current_device()
                 if device is not None:
                     set_current_device(device)
                 try:
-                    # INT8 Conv2d + comfy_quant decode (core only handles Linear).
-                    apply_comfy_quant_int8_patches()
-
                     ckpt_path = folder_paths.get_full_path_or_raise("checkpoints", ckpt_name)
-                    # Auto-detect native comfy_quant INT8; do not force float8 dtype over int8 weights.
-                    is_int8 = weight_dtype == "int8_tensorwise" or checkpoint_looks_like_comfy_quant_int8(ckpt_path)
-
                     model_options = {}
-                    if is_int8:
-                        reset_int8_lora_log_counters()
-                        sdxl_logger.info(
-                            "[SDXL INT8] Loading checkpoint via MixedPrecisionOps "
-                            "(int8_tensorwise / comfy_quant): %s",
-                            ckpt_name,
-                        )
-                    elif weight_dtype == "fp8_e4m3fn":
+                    if weight_dtype == "fp8_e4m3fn":
                         model_options["dtype"] = torch.float8_e4m3fn
                     elif weight_dtype == "fp8_e4m3fn_fast":
                         model_options["dtype"] = torch.float8_e4m3fn
                         model_options["fp8_optimizations"] = True
                     elif weight_dtype == "fp8_e5m2":
                         model_options["dtype"] = torch.float8_e5m2
-
+                    
                     out = comfy.sd.load_checkpoint_guess_config(
                         ckpt_path,
                         output_vae=False,
@@ -846,8 +817,6 @@ try:
                         model_options=model_options,
                     )
                     model, clip, _v = out[:3]
-                    if is_int8:
-                        summarize_int8_lora_capability(model)
                     return (model, clip)
                 finally:
                     set_current_device(original_device)
@@ -938,13 +907,22 @@ try:
 except Exception as e:
     sdxl_logger.exception(f"[SDXL] Failed to register NunchakuUssoewwinCheckpointLoaderSDXL: {e}")
 
-# Z Image FP8 E4M3 専用 UNet Loader（DiT Loader は init から除外）
+# Z Image FP8 E4M3 UNet Loader (DiT Loader excluded from init)
 try:
     from .hswq.zimage_fp8_e4m3_unet import HSWQFP8E4M3UNetLoader
     NODE_CLASS_MAPPINGS["HSWQFP8E4M3UNetLoader"] = HSWQFP8E4M3UNetLoader
     logger.info("Registered HSWQ FP8 E4M3 UNet Loader (ComfyUI standard UNet loader wrapper)")
 except (ImportError, ModuleNotFoundError) as e:
     logger.debug("HSWQ FP8 E4M3 UNet Loader not registered: %s", e)
+
+# INT8 option dispatch (implementation lives only in patches/comfy_quant_int8.py).
+# Must not fail silently — INT8 + LoRA bake depends on this wrap.
+try:
+    from .patches.comfy_quant_int8 import install_int8_option_dispatch
+    if not install_int8_option_dispatch(NODE_CLASS_MAPPINGS):
+        logger.error("[HSWQ INT8] option dispatch failed — int8_tensorwise / LoRA bake may be broken")
+except Exception as e:
+    logger.exception("[HSWQ INT8] option dispatch raised: %s", e)
 
 # HSWQ Batched Detailer (SEGS) - phase-split version to minimize model switching
 try:

@@ -20,10 +20,10 @@ logger = logging.getLogger(__name__)
 
 class HSWQZImageFP8E4M3UNetLoader:
     """
-    Zimage FP8 E4M3 用 UNet ローダー（HSWQ 専用）。
+    UNet loader for Zimage FP8 E4M3 (HSWQ).
 
-    - Nunchaku 系クラス・モジュールには一切依存しない
-    - ComfyUI 本体の `sd.load_diffusion_model_state_dict` に state_dict をそのまま渡すだけ
+    - No dependency on Nunchaku classes/modules
+    - Passes state_dict straight to ComfyUI `sd.load_diffusion_model_state_dict`
     """
 
     @classmethod
@@ -34,8 +34,8 @@ class HSWQZImageFP8E4M3UNetLoader:
                     get_filename_list("diffusion_models"),
                     {
                         "tooltip": (
-                            "Zimage FP8 E4M3 用 HSWQ UNet モデル "
-                            "（ComfyUI 本体の UNet ローダーで読める .safetensors / .ckpt）"
+                            "HSWQ UNet model for Zimage FP8 E4M3 "
+                            "(.safetensors / .ckpt readable by ComfyUI UNet loader)"
                         )
                     },
                 ),
@@ -52,20 +52,20 @@ class HSWQZImageFP8E4M3UNetLoader:
         model_name: str,
         **kwargs,
     ):
-        # diffusion_models からファイルパス解決
+        # Resolve path under diffusion_models
         model_path = get_full_path_or_raise("diffusion_models", model_name)
 
-        # state_dict + metadata を取得（中身は一切いじらない）
+        # Load state_dict + metadata (do not mutate contents)
         sd, metadata = comfy.utils.load_torch_file(
             model_path,
             return_metadata=True,
         )
 
-        # ComfyUI 本体の UNet ローダーに渡すオプション
+        # Options for ComfyUI core UNet loader
         model_options = {
-            # FP8 E4M3 前提
+            # Assume FP8 E4M3
             "dtype": torch.float8_e4m3fn,
-            # comfy.ops.pick_operations() に fp8_ops を選ばせるためのフラグ
+            # Flag so comfy.ops.pick_operations() selects fp8_ops
             "fp8_optimizations": True,
         }
 
@@ -74,7 +74,7 @@ class HSWQZImageFP8E4M3UNetLoader:
             model_path,
         )
 
-        # 標準 UNet ローダーに state_dict をそのまま渡す。Nunchaku は一切関係なし。
+        # Pass state_dict to the standard UNet loader. No Nunchaku involvement.
         model = comfy_sd.load_diffusion_model_state_dict(
             sd,
             model_options=model_options,

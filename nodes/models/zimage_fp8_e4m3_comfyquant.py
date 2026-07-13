@@ -1,8 +1,8 @@
 """
-Z Image FP8 E4M3 (ComfyUI comfy_quant 形式) 専用 Loader。
+Z Image FP8 E4M3 (ComfyUI comfy_quant format) dedicated loader.
 
-- comfy_quant / weight_scale を含むチェックポイントを comfy.sd.load_checkpoint_guess_config で読む。
-- z_image + FP8 + torch.compile 互換パッチは適用する（ops/LoRA の安全化）。
+- Load checkpoints with comfy_quant / weight_scale via comfy.sd.load_checkpoint_guess_config.
+- Apply z_image + FP8 + torch.compile compatibility patches (safer ops/LoRA).
 """
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 
 class HSWQZImageFP8E4M3ComfyQuantLoader:
     """
-    comfy_quant 形式の Z Image を FP8 E4M3 で読む専用 Loader。
+    Dedicated loader for comfy_quant-format Z Image as FP8 E4M3.
     """
 
     @classmethod
@@ -33,13 +33,13 @@ class HSWQZImageFP8E4M3ComfyQuantLoader:
             "required": {
                 "ckpt_name": (
                     get_filename_list("checkpoints"),
-                    {"tooltip": "comfy_quant 形式の Z Image チェックポイント（checkpoints）。"},
+                    {"tooltip": "comfy_quant-format Z Image checkpoint (checkpoints folder)."},
                 ),
                 "cpu_offload": (
                     ["auto", "enable", "disable"],
                     {
                         "default": "auto",
-                        "tooltip": "CPU オフロード。'auto' は VRAM 15GB 未満で有効。",
+                        "tooltip": "CPU offload. 'auto' enables when VRAM is under 15GB.",
                     },
                 ),
             }
