@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 3.1.9
+
+- **Added**: Native **comfy_quant INT8** (`int8_tensorwise`) load path for SDXL checkpoints — **HSWQ FP8/INT8 Loader (VRAM Opt)** auto-detects INT8 vs Scaled FP8; **HSWQ FP8 E4M3 UNet Loader** gains `int8_tensorwise` / auto-detect. Extension-side Conv2d quant support and INT8-safe LoRA bake under Dynamic VRAM.
+- See [Release Notes v3.1.9](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.9) for details.
+
 ## Version 3.1.8
 
 - **Added**: **HSWQ Save Image** (`NunchakuSaveImage`) — save `IMAGE` output as PNG or JPG (JPEG quality when JPG is selected).
