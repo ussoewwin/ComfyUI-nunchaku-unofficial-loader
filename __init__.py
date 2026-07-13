@@ -792,7 +792,7 @@ try:
                 default_dev = devices[1] if len(devices) > 1 else devices[0]
                 req = {
                     "ckpt_name": (folder_paths.get_filename_list("checkpoints"), {"tooltip": "SDXL checkpoint to load MODEL and CLIP from (same as standard Load Checkpoint)."}),
-                    "weight_dtype": (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2"],),
+                    "weight_dtype": (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2", "int8_tensorwise"],),
                 }
                 opt = {"device": (devices, {"default": default_dev})}
                 return {"required": req, "optional": opt}
@@ -804,20 +804,40 @@ try:
             TITLE = "Checkpoint Loader (SDXL)"
 
             def load_checkpoint(self, ckpt_name, weight_dtype, device=None):
+                from .patches.comfy_quant_int8 import (
+                    apply_comfy_quant_int8_patches,
+                    checkpoint_looks_like_comfy_quant_int8,
+                    reset_int8_lora_log_counters,
+                    summarize_int8_lora_capability,
+                )
+
                 original_device = get_current_device()
                 if device is not None:
                     set_current_device(device)
                 try:
+                    # INT8 Conv2d + comfy_quant decode (core only handles Linear).
+                    apply_comfy_quant_int8_patches()
+
                     ckpt_path = folder_paths.get_full_path_or_raise("checkpoints", ckpt_name)
+                    # Auto-detect native comfy_quant INT8; do not force float8 dtype over int8 weights.
+                    is_int8 = weight_dtype == "int8_tensorwise" or checkpoint_looks_like_comfy_quant_int8(ckpt_path)
+
                     model_options = {}
-                    if weight_dtype == "fp8_e4m3fn":
+                    if is_int8:
+                        reset_int8_lora_log_counters()
+                        sdxl_logger.info(
+                            "[SDXL INT8] Loading checkpoint via MixedPrecisionOps "
+                            "(int8_tensorwise / comfy_quant): %s",
+                            ckpt_name,
+                        )
+                    elif weight_dtype == "fp8_e4m3fn":
                         model_options["dtype"] = torch.float8_e4m3fn
                     elif weight_dtype == "fp8_e4m3fn_fast":
                         model_options["dtype"] = torch.float8_e4m3fn
                         model_options["fp8_optimizations"] = True
                     elif weight_dtype == "fp8_e5m2":
                         model_options["dtype"] = torch.float8_e5m2
-                    
+
                     out = comfy.sd.load_checkpoint_guess_config(
                         ckpt_path,
                         output_vae=False,
@@ -826,6 +846,8 @@ try:
                         model_options=model_options,
                     )
                     model, clip, _v = out[:3]
+                    if is_int8:
+                        summarize_int8_lora_capability(model)
                     return (model, clip)
                 finally:
                     set_current_device(original_device)

@@ -77,7 +77,7 @@ ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, w
 
 - **Checkpoint Loading**: Loads both UNet (MODEL) and CLIP from a single SDXL checkpoint file (same as standard Load Checkpoint)
 - **Device Selection**: Optional device parameter to choose GPU (e.g. `cuda:0`, `cuda:1`) or CPU for model loading
-- **FP8 Precision**: Supports `default`, `fp8_e4m3fn`, `fp8_e4m3fn_fast`, and `fp8_e5m2` weight dtypes for memory-efficient inference
+- **Weight dtype**: Supports `default`, `fp8_e4m3fn`, `fp8_e4m3fn_fast`, `fp8_e5m2`, and `int8_tensorwise` (native comfy_quant INT8 / MixedPrecisionOps; INT8 checkpoints are also auto-detected)
 - **Standard ComfyUI Integration**: Uses `load_checkpoint_guess_config`; compatible with standard ComfyUI workflows
 
 #### Usage Notes
