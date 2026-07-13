@@ -131,6 +131,48 @@ def _take_pin_from_pool(size: int):
     return pin
 
 
+def _force_unregister_pin(pin, size: int, mm) -> None:
+    """unpin_memory first; if still HostRegistered, force cudaHostUnregister + PINNED_MEMORY pop."""
+    import torch
+
+    try:
+        mm.unpin_memory(pin)
+    except Exception:
+        pass
+    try:
+        if not bool(getattr(pin, "is_pinned", lambda: False)()):
+            return
+    except Exception:
+        return
+    try:
+        ptr = int(pin.data_ptr())
+    except Exception:
+        return
+    if ptr == 0:
+        return
+    try:
+        if torch.cuda.cudart().cudaHostUnregister(ptr) != 0:
+            try:
+                mm.discard_cuda_async_error()
+            except Exception:
+                pass
+    except Exception:
+        pass
+    pinned = getattr(mm, "PINNED_MEMORY", None)
+    if isinstance(pinned, dict) and ptr in pinned:
+        try:
+            stored = int(pinned.pop(ptr, 0) or 0)
+        except Exception:
+            stored = 0
+            pinned.pop(ptr, None)
+        try:
+            mm.TOTAL_PINNED_MEMORY = max(
+                0, int(getattr(mm, "TOTAL_PINNED_MEMORY", 0) or 0) - (stored or int(size or 0))
+            )
+        except Exception:
+            pass
+
+
 def _drain_pool() -> None:
     global _PIN_CACHE_TOTAL
     try:
@@ -142,10 +184,7 @@ def _drain_pool() -> None:
     for size, pool in list(_PIN_BUFFER_POOL.items()):
         while pool:
             pin = pool.pop()
-            try:
-                mm.unpin_memory(pin)
-            except Exception:
-                pass
+            _force_unregister_pin(pin, size, mm)
             _PIN_CACHE_TOTAL = max(0, _PIN_CACHE_TOTAL - size)
         del _PIN_BUFFER_POOL[size]
     _PIN_CACHE_TOTAL = 0
@@ -280,9 +319,19 @@ def _soft_partially_unload_ram(self, ram_to_unload, subsets=None):
             else:
                 # Hostbuf view → freestanding pool entry.
                 if registered:
-                    if torch.cuda.cudart().cudaHostUnregister(pin.data_ptr()) != 0:
+                    try:
+                        ptr = int(pin.data_ptr())
+                    except Exception:
+                        ptr = 0
+                    if ptr and torch.cuda.cudart().cudaHostUnregister(ptr) != 0:
                         mm.discard_cuda_async_error()
                     else:
+                        pinned = getattr(mm, "PINNED_MEMORY", None)
+                        if isinstance(pinned, dict) and ptr in pinned:
+                            try:
+                                pinned.pop(ptr, None)
+                            except Exception:
+                                pass
                         mm.TOTAL_PINNED_MEMORY = max(0, mm.TOTAL_PINNED_MEMORY - size)
                         pinned_size[0] = max(0, pinned_size[0] - size)
                 try:
