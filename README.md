@@ -25,21 +25,21 @@ As a result:
 - SDXL SVDQ should be considered experimental / archival only
 - This repository will no longer be updated with new SDXL SVDQ models.
 
-### Future Direction: fp8e4m3
+### Future Direction: fp8e4m3 and INT8
 
-Future SDXL-related development efforts are shifting toward fp8e4m3-based compression and formats.
+Future SDXL-related development efforts are shifting toward **fp8e4m3**- and **INT8**-based compression and formats.
 
-This decision is based on extensive comparative testing, which demonstrated that fp8e4m3 provides a substantially better balance between performance, memory usage, and image quality:
+This decision is based on extensive comparative testing, which demonstrated that both fp8e4m3 and INT8 provide a substantially better balance between performance, memory usage, and image quality than SDXL SVDQ / FP4:
 
-- Fully compatible with standard ComfyUI loaders
+- Fully compatible with standard ComfyUI loaders (and this repository's FP8 / INT8 loaders)
 - Image quality effectively equivalent to fp16
 - No generation speed penalty
 - No increase in VRAM usage
 - Model size reduction comparable to 4-bit SVDQ, without its runtime drawbacks
 
-fp8e4m3-based SDXL models, compression scripts, and related technical documentation will continue to be published separately.
+fp8e4m3- and INT8-based SDXL models, compression scripts, and related technical documentation will continue to be published separately.
 
-The fp8e4m3 development is **[Hybrid-Sensitivity-Weighted-Quantization (HSWQ)](https://github.com/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization)**. HSWQ is a novel FP8 E4M3 quantization method that combines sensitivity analysis and importance-weighted histogram optimization, achieving superior quality compared to naive uniform quantization while maintaining standard loader compatibility.
+The fp8e4m3 / INT8 development is **[Hybrid-Sensitivity-Weighted-Quantization (HSWQ)](https://github.com/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization)**. HSWQ is a novel quantization method (FP8 E4M3 and INT8) that combines sensitivity analysis and importance-weighted histogram optimization, achieving superior quality compared to naive uniform quantization while maintaining standard loader compatibility.
 
 - **Quantized HSWQ SDXL models (FP8):** [Hugging Face — Hybrid-Sensitivity-Weighted-Quantization-SDXL-fp8e4m3](https://huggingface.co/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization-SDXL-fp8e4m3)
 - **Quantized HSWQ SDXL models (INT8):** [Hugging Face — Hybrid-Sensitivity-Weighted-Quantization-SDXL-INT8](https://huggingface.co/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization-SDXL-INT8)
