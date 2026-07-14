@@ -584,7 +584,7 @@ try:
             OUTPUT_TOOLTIPS = ("The UNet diffusion model from checkpoint.", "The CLIP model from the SDXL checkpoint.")
             FUNCTION = "load_checkpoint"
             CATEGORY = "loaders"
-            TITLE = "Checkpoint Loader (SDXL)"
+            TITLE = "HSWQ Checkpoint Loader (SDXL)"
 
             def load_checkpoint(self, ckpt_name, weight_dtype, device=None):
                 original_device = get_current_device()
