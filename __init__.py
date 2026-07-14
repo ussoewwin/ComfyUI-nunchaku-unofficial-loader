@@ -531,44 +531,8 @@ except InvalidVersion:
 
 NODE_CLASS_MAPPINGS = {}
 
-# Checkpoint Loader (SDXL): NunchakuSDXLIntegratedLoader + NunchakuSDXLDiTLoaderDualCLIP
-# Nunchaku Ultimate SD Upscale
-# (Other Nunchaku SDXL nodes removed)
-try:
-    from .nodes.models.sdxl import NunchakuSDXLDiTLoaderDualCLIP, NunchakuSDXLIntegratedLoader
-
-    NODE_CLASS_MAPPINGS["NunchakuUssoewwinSDXLDiTLoaderDualCLIP"] = NunchakuSDXLDiTLoaderDualCLIP
-    NODE_CLASS_MAPPINGS["NunchakuUssoewwinSDXLIntegratedLoader"] = NunchakuSDXLIntegratedLoader
-except (ImportError, ModuleNotFoundError) as e:
-    logger.exception(f"Node `NunchakuSDXLDiTLoaderDualCLIP` or `NunchakuSDXLIntegratedLoader` import failed: {e}")
-    # Try alternative import method using absolute path
-    try:
-        import importlib.util
-        from pathlib import Path
-
-        # Get the directory where __init__.py is located
-        current_dir = Path(__file__).parent.resolve()
-        sdxl_path = current_dir / "nodes" / "models" / "sdxl.py"
-
-        if not sdxl_path.exists():
-            raise FileNotFoundError(f"sdxl.py not found at {sdxl_path}")
-
-        spec = importlib.util.spec_from_file_location(
-            "nodes.models.sdxl",
-            str(sdxl_path)
-        )
-        if spec is None or spec.loader is None:
-            raise ImportError(f"Failed to create spec for {sdxl_path}")
-
-        sdxl_module = importlib.util.module_from_spec(spec)
-        spec.loader.exec_module(sdxl_module)
-        if hasattr(sdxl_module, "NunchakuSDXLDiTLoaderDualCLIP"):
-            NODE_CLASS_MAPPINGS["NunchakuUssoewwinSDXLDiTLoaderDualCLIP"] = sdxl_module.NunchakuSDXLDiTLoaderDualCLIP
-        if hasattr(sdxl_module, "NunchakuSDXLIntegratedLoader"):
-            NODE_CLASS_MAPPINGS["NunchakuUssoewwinSDXLIntegratedLoader"] = sdxl_module.NunchakuSDXLIntegratedLoader
-        logger.info(f"Successfully loaded NunchakuSDXLDiTLoaderDualCLIP and NunchakuSDXLIntegratedLoader using alternative method from {sdxl_path}")
-    except Exception as e2:
-        logger.exception(f"Alternative import method also failed: {e2}")
+# SDXL Integrated Loader / DualCLIP loaders removed (owner order).
+# Nunchaku Ultimate SD Upscale remains.
 
 try:
     from .nodes.nunchaku_usdu import (
