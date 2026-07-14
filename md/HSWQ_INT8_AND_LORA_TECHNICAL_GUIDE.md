@@ -57,11 +57,11 @@ After a successful INT8 load: `reset_int8_lora_log_counters()` then `summarize_i
 
 Per slot, Status lines always include:
 
-- `lora名=` — real filename (not adapter type string `"lora"`)
-- `適用キー数=` — unet + clip (with breakdown)
-- `スキップキー数=` — `not_mapped` + `mapped_but_not_attached`
+- `lora_name=` — real filename (not adapter type string `"lora"`)
+- `applied_keys=` — unet + clip (with breakdown)
+- `skipped_keys=` — `not_mapped` + `mapped_but_not_attached`
 
-(The Japanese field labels are intentional console keys, aligned with the Status style used by `ComfyUI-QwenImageLoraLoader`.) Hooks target **shared ComfyUI paths**, not one specific custom LoRA node.
+Hooks target **shared ComfyUI paths**, not one specific custom LoRA node.
 
 ### 1.5 Dynamic bake and VBAR (critical fix)
 
@@ -233,7 +233,7 @@ def _slot_applied_count(entry: dict) -> int:
 
 
 def _format_lora_slot_line(slot_i: int, entry: dict, include_bake: bool = False) -> str:
-    """lora名 / 適用キー数 / スキップキー数 — always present."""
+    """lora_name / applied_keys / skipped_keys — always present."""
     name = entry.get("lora_name") or "(unknown)"
     sm = entry.get("strength_model")
     sc = entry.get("strength_clip")
@@ -243,9 +243,9 @@ def _format_lora_slot_line(slot_i: int, entry: dict, include_bake: bool = False)
     skip = _slot_skip_count(entry)
     parts = [
         f"Slot {slot_i}:",
-        f"lora名='{name}'",
-        f"適用キー数={applied} (unet={u} clip={c})",
-        f"スキップキー数={skip}",
+        f"lora_name='{name}'",
+        f"applied_keys={applied} (unet={u} clip={c})",
+        f"skipped_keys={skip}",
     ]
     if sm is not None:
         parts.append(f"strength_model={sm}")
@@ -1216,7 +1216,7 @@ def _per_lora_bake_verdict(entry: dict) -> tuple[str, int, int, int]:
 
 
 def dump_int8_lora_bake_stats(force: bool = False) -> None:
-    """Full Status dump: lora名 / 適用キー数 / スキップキー数 (+ bake if any)."""
+    """Full Status dump: lora_name / applied_keys / skipped_keys (+ bake if any)."""
     if not force and getattr(dump_int8_lora_bake_stats, "_dumped_this_load", False):
         return
     dump_int8_lora_bake_stats._dumped_this_load = True
@@ -1229,7 +1229,7 @@ def dump_int8_lora_bake_stats(force: bool = False) -> None:
     _lora_line(f"[HSWQ LoRA Status] ===== bake summary ({n} slot(s)) =====")
     if not history:
         _lora_line(
-            "[HSWQ LoRA Status] Slot -: | lora名='(none)' | 適用キー数=0 | スキップキー数=0 | → SKIPPED ✗"
+            "[HSWQ LoRA Status] Slot -: | lora_name='(none)' | applied_keys=0 | skipped_keys=0 | → SKIPPED ✗"
         )
     ok_n = 0
     for i, a in enumerate(history, 1):
@@ -1725,12 +1725,11 @@ mm.unet_offload_device = unet_offload_device_patched
 from .utils import get_package_version, get_plugin_version
 
 # -------------------------------------------------------------------------
-# HSWQ Pin Cache: comfy.pinned_memory の pin_memory / unpin_memory を
-# monkey-patch し、cudaHostRegister/Unregister の繰り返しを回避する。
+# HSWQ Pin Cache: monkey-patch comfy.pinned_memory pin_memory / unpin_memory
+# to avoid repeated cudaHostRegister/Unregister.
 #
-# FaceDetailer 等でモデルが UNet → VAE → UNet と切り替わるたび、
-# 全 weight の pin バッファが破棄・再作成されるのを防ぐ。
-# unpin 時にバッファをキャッシュし、再 pin 時に再利用する。
+# When FaceDetailer (etc.) switches UNet → VAE → UNet, prevent tear-down and
+# recreate of all weight pin buffers. Cache buffers on unpin; reuse on re-pin.
 # -------------------------------------------------------------------------
 try:
     import collections
@@ -1862,9 +1861,9 @@ except Exception as e:
     logger.debug("HSWQ PinCache: not installed: %s", e)
 
 # -------------------------------------------------------------------------
-# HSWQ PinDebug: comfy.model_management.pin_memory 呼び出しの実態をログに出す
-# (PinCache がキャッシュヒットした場合は model_management.pin_memory を
-#  呼ばないため、このログにはキャッシュミス時のみ出力される)
+# HSWQ PinDebug: log real comfy.model_management.pin_memory calls
+# (on PinCache hit, model_management.pin_memory is not called, so this
+#  log only appears on cache miss)
 # -------------------------------------------------------------------------
 try:
     import inspect
@@ -1921,16 +1920,15 @@ try:
 except Exception as e:
     logger.debug("USDU compat patches not applied: %s", e)
 
-# torch.compile + FP8 + Lumina/Flux + comfy_kitchen 互換パッチ
-# NunchakuFluxLoraStacker のパッチモジュールから安全なパッチのみ選択適用:
-#   - LoraDiff.calculate_weight: reshape != weight.shape の LoRA をスキップ (根本対策)
-#   - lumina.modulate / apply_gate: hidden_dim 不一致時の安全フォールバック
+# torch.compile + FP8 + Lumina/Flux + comfy_kitchen compatibility patches
+# Selectively apply only safe patches from NunchakuFluxLoraStacker:
+#   - LoraDiff.calculate_weight: skip LoRA when reshape != weight.shape (root fix)
+#   - lumina.modulate / apply_gate: safe fallback on hidden_dim mismatch
 #
-# 注意: グローバルな F.linear / matmul / mul / add パッチは適用しない。
-# これらは RuntimeError をキャッチしてテンソルをスライスするが、ComfyUI 本体が
-# 同じ RuntimeError を使って不正な LoRA を検出・スキップしているため、
-# グローバルパッチが ComfyUI のエラーハンドリングを横取りし、壊れた次元の
-# テンソルが後続の RMSNorm 等でクラッシュを引き起こす。
+# Note: do not apply global F.linear / matmul / mul / add patches.
+# Those catch RuntimeError and slice tensors, but ComfyUI core uses the same
+# RuntimeError to detect/skip bad LoRA; a global patch would steal that
+# handling and let broken-rank tensors crash later in RMSNorm etc.
 try:
     import importlib
     _lora_stacker_patches = None
@@ -1947,7 +1945,7 @@ try:
 
     _applied = []
     if _lora_stacker_patches:
-        # LoRA reshape != weight.shape をスキップ (根本対策: 不正 LoRA の適用を防ぐ)
+        # Skip LoRA when reshape != weight.shape (root fix: block bad LoRA apply)
         _fn = getattr(_lora_stacker_patches, "_apply_lumina_modulate_patch", None)
         if _fn and _fn():
             _applied.append("lumina.modulate")
@@ -1955,7 +1953,7 @@ try:
         if _fn and _fn():
             _applied.append("lumina.apply_gate")
 
-        # LoraDiff.calculate_weight パッチは apply_patches() 末尾にあるため直接適用
+        # LoraDiff.calculate_weight patch sits at end of apply_patches(); apply directly
         try:
             import comfy.weight_adapter.lora as _lora_mod
             _LoraDiff = getattr(_lora_mod, "LoraDiff", None)
@@ -2491,7 +2489,7 @@ try:
 except Exception as e:
     sdxl_logger.exception(f"[SDXL] Failed to register NunchakuUssoewwinCheckpointLoaderSDXL: {e}")
 
-# Z Image FP8 E4M3 専用 UNet Loader（DiT Loader は init から除外）
+# Z-Image FP8 E4M3 dedicated UNet Loader (DiT Loader excluded from init)
 try:
     from .hswq.zimage_fp8_e4m3_unet import HSWQFP8E4M3UNetLoader
     NODE_CLASS_MAPPINGS["HSWQFP8E4M3UNetLoader"] = HSWQFP8E4M3UNetLoader
@@ -5521,11 +5519,13 @@ UNETLoader = HSWQFP8E4M3UNetLoader
 
 ```python
 """
-Z Image + FP8 E4M3 + torch.compile 時の mat1/mat2 shape 不一致を防ぐパッチ（ComfyUI-nunchaku-unofficial-loader 内）。
+Patch inside ComfyUI-nunchaku-unofficial-loader to prevent mat1/mat2 shape
+mismatches when running Z-Image + FP8 E4M3 + torch.compile.
 
-- LoRA: reshape や lora 出力要素数が weight と一致しない場合はそのレイヤへの適用をスキップする。
-- comfy.ops Linear: torch.compile 中、または input.shape[-1] != weight.shape[1] のときは
-  3D/QuantizedTensor 経路を通さず、不一致時は入力を weight.shape[1] でスライスしてクラッシュを防ぐ。
+- LoRA: skip applying a layer when reshape or LoRA output numel does not match weight.
+- comfy.ops Linear: while torch.compile is running, or when
+  input.shape[-1] != weight.shape[1], skip the 3D/QuantizedTensor path and,
+  on mismatch, slice the input to weight.shape[1] to avoid a crash.
 """
 from __future__ import annotations
 
@@ -5536,7 +5536,7 @@ _PATCHES_APPLIED = False
 
 
 def _apply_ops_patch() -> bool:
-    """comfy.ops.mixed_precision_ops をラップし、torch.compile / shape 不一致時に 3D/FP8 input 経路をスキップする。"""
+    """Wrap comfy.ops.mixed_precision_ops; skip 3D/FP8 input path under compile / shape mismatch."""
     try:
         import torch
         import comfy.ops as ops_module
@@ -5603,7 +5603,7 @@ def _apply_ops_patch() -> bool:
 
 
 def _apply_lora_patch() -> bool:
-    """LoraDiff.calculate_weight をラップし、z_image/FP8 時は reshape ・要素数不一致でスキップする。"""
+    """Wrap LoraDiff.calculate_weight; for z_image/FP8 skip on reshape or numel mismatch."""
     try:
         import torch
         import comfy.weight_adapter.lora as lora_module
@@ -5686,11 +5686,11 @@ def _apply_lora_patch() -> bool:
 
 def _apply_rmsnorm_patch() -> bool:
     """
-    comfy.ops.RMSNorm.forward_comfy_cast_weights をラップし、
-    normalized_shape[0] と input.shape[-1] が異なる場合でも落ちないようにする。
+    Wrap comfy.ops.RMSNorm.forward_comfy_cast_weights so a mismatch between
+    normalized_shape[0] and input.shape[-1] does not crash.
 
-    - 形が一致している場合: 元の実装のまま
-    - 形が不一致の場合: weight の方を input の次元数に合わせてスライス／パディングし、torch.rms_norm を直接呼ぶ
+    - Matching shapes: call the original implementation.
+    - Mismatch: slice/pad weight to the input last-dim, then call torch.rms_norm.
     """
     try:
         import torch
@@ -5744,8 +5744,8 @@ def _apply_rmsnorm_patch() -> bool:
 
 def apply_zimage_fp8_torchcompile_patches() -> bool:
     """
-    Z Image FP8 E4M3 + torch.compile 互換パッチを適用する。
-    重複適用はスキップする。戻り値はパッチが適用されたかどうか。
+    Apply Z-Image FP8 E4M3 + torch.compile compatibility patches.
+    Skip if already applied. Returns whether patches are in effect.
     """
     global _PATCHES_APPLIED
     if _PATCHES_APPLIED:
@@ -5816,7 +5816,7 @@ Without these, ModelPatcher rounds into int8 and **Conv LoRA deltas die**.
 | `nodes.LoraLoader.load_lora` | stock node |
 | `inspect.stack` local scan | Power LoRA / dict widgets, etc. |
 
-`_looks_like_lora_filename` rejects adapter type names (fixes the old `lora名=lora` bug).
+`_looks_like_lora_filename` rejects adapter type names (fixes the old `lora_name=lora` bug).
 
 #### 4.1.6 `_patch_load_lora_key_counts`
 
@@ -5905,7 +5905,7 @@ any LoRA loader node
 | Prefix / token | Meaning |
 |----------------|---------|
 | `[HSWQ INT8 LoRA] ===== load summary =====` | set/convert readiness |
-| `[HSWQ LoRA Status] Slot N: lora名=...` | attach-time Status |
+| `[HSWQ LoRA Status] Slot N: lora_name=...` | attach-time Status |
 | `[HSWQ LoRA Status] ===== bake summary` | post-bake Status |
 | `[HSWQ LoRA Bake] path OK (all requant)` | healthy bake path |
 | `BROKEN_int8_round` / `int8_round` WARN | LoRA on those layers is broken |
@@ -5913,7 +5913,7 @@ any LoRA loader node
 ## Appendix D — Maintainer checklist
 
 1. Do not delete `module._v` after bake (VBAR bump allocator).
-2. Never put adapter type strings in Status `lora名`.
+2. Never put adapter type strings in Status `lora_name`.
 3. Do not claim “LoRA ready” if Conv2d lacks `set_weight` / `convert_weight`.
 4. Restart ComfyUI after raising patch version constants.
 5. Do not re-introduce permanent core `ops.py` edits; this extension exists so core updates do not wipe the fix.

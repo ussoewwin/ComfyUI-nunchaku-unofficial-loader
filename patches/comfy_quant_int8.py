@@ -120,7 +120,7 @@ def _slot_applied_count(entry: dict) -> int:
 
 
 def _format_lora_slot_line(slot_i: int, entry: dict, include_bake: bool = False) -> str:
-    """lora名 / 適用キー数 / スキップキー数 — always present."""
+    """lora_name / applied_keys / skipped_keys — always present."""
     name = entry.get("lora_name") or "(unknown)"
     sm = entry.get("strength_model")
     sc = entry.get("strength_clip")
@@ -130,9 +130,9 @@ def _format_lora_slot_line(slot_i: int, entry: dict, include_bake: bool = False)
     skip = _slot_skip_count(entry)
     parts = [
         f"Slot {slot_i}:",
-        f"lora名='{name}'",
-        f"適用キー数={applied} (unet={u} clip={c})",
-        f"スキップキー数={skip}",
+        f"lora_name='{name}'",
+        f"applied_keys={applied} (unet={u} clip={c})",
+        f"skipped_keys={skip}",
     ]
     if sm is not None:
         parts.append(f"strength_model={sm}")
@@ -1164,7 +1164,7 @@ def _per_lora_bake_verdict(entry: dict) -> tuple[str, int, int, int]:
 
 
 def dump_int8_lora_bake_stats(force: bool = False) -> None:
-    """Full Status dump: lora名 / 適用キー数 / スキップキー数 (+ bake if any)."""
+    """Full Status dump: lora_name / applied_keys / skipped_keys (+ bake if any)."""
     if not force and getattr(dump_int8_lora_bake_stats, "_dumped_this_load", False):
         return
     dump_int8_lora_bake_stats._dumped_this_load = True
@@ -1177,7 +1177,7 @@ def dump_int8_lora_bake_stats(force: bool = False) -> None:
     _lora_line(f"[HSWQ LoRA Status] ===== bake summary ({n} slot(s)) =====")
     if not history:
         _lora_line(
-            "[HSWQ LoRA Status] Slot -: | lora名='(none)' | 適用キー数=0 | スキップキー数=0 | → SKIPPED ✗"
+            "[HSWQ LoRA Status] Slot -: | lora_name='(none)' | applied_keys=0 | skipped_keys=0 | → SKIPPED ✗"
         )
     ok_n = 0
     for i, a in enumerate(history, 1):
