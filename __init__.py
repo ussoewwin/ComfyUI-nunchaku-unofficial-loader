@@ -564,7 +564,7 @@ try:
     else:
 
         class NunchakuUssoewwinCheckpointLoaderSDXL(_UNETLoaderBase):
-            """Checkpoint Loader (SDXL) with device selection. Ref: CheckpointLoaderSimple."""
+            """HSWQ Checkpoint Loader (SDXL) with device selection. Ref: CheckpointLoaderSimple."""
 
             @classmethod
             def INPUT_TYPES(cls):
@@ -721,7 +721,9 @@ try:
 except (ImportError, ModuleNotFoundError) as e:
     logger.debug("HSWQ Batched Detailer not registered: %s", e)
 
-NODE_DISPLAY_NAME_MAPPINGS = {k: v.TITLE for k, v in NODE_CLASS_MAPPINGS.items()}
+NODE_DISPLAY_NAME_MAPPINGS = {k: getattr(v, "TITLE", k) for k, v in NODE_CLASS_MAPPINGS.items()}
+# Explicit override — TITLE alone is not enough for ComfyUI graph node headers.
+NODE_DISPLAY_NAME_MAPPINGS["NunchakuUssoewwinCheckpointLoaderSDXL"] = "HSWQ Checkpoint Loader (SDXL)"
 WEB_DIRECTORY = "js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 logger.info("=" * (80 + len(" ComfyUI-nunchaku Initialization ")))
