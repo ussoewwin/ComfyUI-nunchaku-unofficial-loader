@@ -149,14 +149,7 @@ mm.unet_offload_device = unet_offload_device_patched
 
 from .utils import get_package_version, get_plugin_version
 
-# PinCache / PinDebug must NOT install at import (or anywhere globally).
-# Old pin_memory(module)/unpin_memory wrappers break current ComfyUI
-# pinned_memory.pin_memory(module, subset=, size=) (hostbuf Dynamic VRAM)
-# and poisoned Nunchaku / Z-Image / Lumina2 loads (0.00 MB usable → CUDA abort).
-# Detailer-only rewrite: nodes/hswq_pin_cache.py (activate inside
-# HSWQBatchedDetailer.doit via hswq_pin_cache_scope). Native ComfyUI pin
-# elsewhere.
-# INT8 comfy_quant patches are NOT applied at import either — only when an
+# INT8 comfy_quant patches are NOT applied at import — only when an
 # INT8 HSWQ / SDXL load path calls apply_comfy_quant_int8_patches().
 
 # HSWQ&Nunchaku Ultimate SD Upscale: apply copy_ / FP8 bias / embedder / Lumina compat patches in this extension

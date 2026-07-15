@@ -146,16 +146,7 @@ ComfyUI output node that saves images to your ComfyUI **output** folder as **PNG
 
 <img src="png/hswqunet.png" alt="HSWQ FP8 E4M3 UNet Loader" width="400">
 
-Standard ComfyUI UNet loader wrapper that loads FP8 and INT8 diffusion models (**general FP8 and INT8**, not limited to HSWQ-only weights). When this extension is loaded, it also installs a **Pin Buffer Cache** that patches ComfyUI's `pin_memory` / `unpin_memory` used by Dynamic VRAM Loading.
-
-#### Why the Pin Buffer Cache matters
-
-With **Dynamic VRAM Loading**, ComfyUI loads each layer on demand (CPU → GPU) and uses **pinned memory** for fast transfer. When a model is unloaded, all pin buffers are destroyed; when the same model is loaded again, new buffers are created and re-registered with the CUDA API (`cudaHostRegister` / `cudaHostUnregister`). Those calls are expensive (page-table and GPU MMU updates, CPU–GPU sync). With many layers (e.g. Lumina2 ~200), a single model switch can trigger hundreds of register/unregister calls and cause severe slowdowns—especially in workflows that switch models often (e.g. FaceDetailer: VAE → UNet → VAE per segment).
-
-#### What this loader does
-
-- **Node**: Loads the UNet (MODEL) from FP8 / INT8 checkpoints like the standard UNet loader (HSWQ FP8 E4M3, Scaled FP8, and native comfy_quant / `int8_tensorwise` when selected or auto-detected).
-- **Cache (extension-wide)**: Monkey-patches `comfy.pinned_memory.pin_memory` and `unpin_memory`. On unpin, buffers are stored in a size-keyed pool (up to a cap, e.g. 16GB) instead of being destroyed. On pin, a matching buffer is reused when available, avoiding repeated `cudaHostRegister`/`cudaHostUnregister` and reducing stalls.
+Standard ComfyUI UNet loader wrapper that loads FP8 and INT8 diffusion models (**general FP8 and INT8**, not limited to HSWQ-only weights). Loads the UNet (MODEL) from FP8 / INT8 checkpoints like the standard UNet loader (HSWQ FP8 E4M3, Scaled FP8, and native comfy_quant / `int8_tensorwise` when selected or auto-detected).
 
 ### HSWQ Batched Detailer (SEGS)
 
@@ -171,7 +162,7 @@ Typical DetailerForEach runs, for each segment:
 2. KSampler (UNet)  
 3. VAE decode  
 
-So the pipeline does: VAE load → UNet load → VAE load → UNet load → … With many segments this causes repeated unpin/pin of all layers and heavy use of `cudaHostRegister`/`cudaHostUnregister`, leading to long stalls (especially with CUDAGraphs).
+So the pipeline does: VAE load → UNet load → VAE load → UNet load → … With many segments this causes repeated model switches and Dynamic VRAM reloads, leading to long stalls (especially with CUDAGraphs).
 
 #### What HSWQ Batched Detailer does
 
