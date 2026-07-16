@@ -142,9 +142,9 @@ ComfyUI output node that saves images to your ComfyUI **output** folder as **PNG
 - **Category**: `image` (output node; no return socket)
 - **Output path**: Uses ComfyUI's standard output directory via `folder_paths.get_output_directory()`
 
-### HSWQ FP8 E4M3 UNet Loader
+### HSWQ FP8 E4M3/INT8 UNet Loader
 
-<img src="png/hswqunet.png" alt="HSWQ FP8 E4M3 UNet Loader" width="400">
+<img src="png/hswqunet.png" alt="HSWQ FP8 E4M3/INT8 UNet Loader" width="400">
 
 Standard ComfyUI UNet loader wrapper that loads FP8 and INT8 diffusion models (**general FP8 and INT8**, not limited to HSWQ-only weights). Loads the UNet (MODEL) from FP8 / INT8 checkpoints like the standard UNet loader (HSWQ FP8 E4M3, Scaled FP8, and native comfy_quant / `int8_tensorwise` when selected or auto-detected).
 
