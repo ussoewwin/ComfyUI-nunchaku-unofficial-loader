@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 3.2.2
+
+- **Fixed**: INT8→Nunchaku VRAM handoff false-positive on non-SVDQ loads (including SDXL INT8 normal generation) — SVDQ detection no longer uses bare `"nunchaku" in __module__` (this extension’s INT8 Conv2d path contains that substring); handoff `_VER = 10` arms only for real Nunchaku SVDQ on the BaseModel, and native comfy_quant INT8 (any architecture) never arms handoff.
+- See [Release Notes v3.2.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.2) for details.
+
 ## Version 3.2.1
 
 - **Fixed**: INT8 HSWQ (Dynamic VRAM) → Nunchaku SVDQ coexistence Abort — LowVramPatch and Dynamic LoRA bake restricted to `comfy.quant_ops.QuantizedTensor` only (never bare `torch.int8`); unidirectional VRAM handoff uses `detach(unpatch_all=True)` before SVDQ load.
