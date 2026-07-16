@@ -717,6 +717,13 @@ try:
 except (ImportError, ModuleNotFoundError) as e:
     logger.debug("HSWQ Batched Detailer not registered: %s", e)
 
+try:
+    from .nodes.hswq_sampler import HSWQSampler
+    NODE_CLASS_MAPPINGS["HSWQSampler"] = HSWQSampler
+    logger.info("Registered HSWQ Sampler")
+except (ImportError, ModuleNotFoundError) as e:
+    logger.debug("HSWQ Sampler not registered: %s", e)
+
 NODE_DISPLAY_NAME_MAPPINGS = {k: getattr(v, "TITLE", k) for k, v in NODE_CLASS_MAPPINGS.items()}
 # Explicit override — TITLE alone is not enough for ComfyUI graph node headers.
 NODE_DISPLAY_NAME_MAPPINGS["NunchakuUssoewwinCheckpointLoaderSDXL"] = "HSWQ Checkpoint Loader (SDXL)"
