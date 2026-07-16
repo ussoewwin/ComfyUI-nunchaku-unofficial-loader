@@ -1,74 +1,65 @@
 # HSWQ INT8 and Nunchaku Coexistence — Complete Technical Guide
 
-**Date of record:** 2026-07-16  
+**Date of record:** 2026-07-16 (rewritten after PinCache / Abort causation audit)  
 **Repository:** `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
 **Primary file:** `patches/comfy_quant_int8.py`  
-**Status of fix:** Unidirectional VRAM handoff **INT8 Dynamic → Nunchaku SVDQ** (working).  
-**Rejected approach:** Bidirectional handoff with pin/VBAR reset + Nunchaku detach before INT8 reload (**broke INT8 reload**; rolled back).
+**Authoritative tree tip for this rewrite:** `4e51074` (`fix: remove Detailer Pin Buffer Cache again`) on top of `df9ba74` / `747b64b`  
+**PinCache status:** **Removed** (again). Not part of the INT8→Nunchaku Abort fix. See `md/HSWQ_PIN_BUFFER_CACHE_REMOVAL_GUIDE.md` and [v3.2.0](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.0).
 
-This document explains the **INT8 HSWQ UNet (Dynamic VRAM) → Nunchaku Z-Image (SVDQ)** crash, the **root cause**, the **working countermeasure**, the **files and full code** involved, and the **meaning** of each piece. Section numbering matches the requested outline (①–⑥).
+This document explains **INT8 HSWQ (Dynamic VRAM) → Nunchaku Z-Image (SVDQ)** failures in one ComfyUI process: **what Aborts look like**, **verified root causes**, **working countermeasures in `comfy_quant_int8.py`**, **what is explicitly not a countermeasure (Pin Buffer Cache / HostBuffer theater)**, and **how to read the code**.
 
 ---
 
 ## Table of contents
 
-1. [Error content (①)](#1-error-content-)
-2. [Root cause (②)](#2-root-cause-)
-3. [Countermeasure overview (③)](#3-countermeasure-overview-)
-4. [Modified file names (④)](#4-modified-file-names-)
-5. [Full text of added / modified code (⑤)](#5-full-text-of-added--modified-code-)
-6. [Meaning of the code (⑥)](#6-meaning-of-the-code-)
+1. [Error content](#1-error-content)
+2. [Root cause (verified)](#2-root-cause-verified)
+3. [Countermeasure overview](#3-countermeasure-overview)
+4. [Modified file names](#4-modified-file-names)
+5. [Full text of added / modified code](#5-full-text-of-added--modified-code)
+6. [Meaning of the code](#6-meaning-of-the-code)
 7. [Appendix A — Rejected bidirectional handoff (v2)](#appendix-a--rejected-bidirectional-handoff-v2)
-8. [Appendix B — Related false-positive INT8 bake on Nunchaku](#appendix-b--related-false-positive-int8-bake-on-nunchaku)
+8. [Appendix B — Pin Buffer Cache is not the Abort fix](#appendix-b--pin-buffer-cache-is-not-the-abort-fix)
+9. [Appendix C — Audit timeline (correlation ≠ causation)](#appendix-c--audit-timeline-correlation--causation)
 
 ---
 
-## 1. Error content (①)
+## 1. Error content
 
 ### 1.1 Reproduction workflow
 
 Typical failing sequence (same ComfyUI process, no restart between steps):
 
-1. Load **HSWQ INT8** UNet (e.g. `*_int8` / `int8_tensorwise`) under **Dynamic VRAM**.
+1. Load **HSWQ INT8** UNet (`*_int8` / `int8_tensorwise`) under **Dynamic VRAM**.
 2. Run KSampler — INT8 path completes (often with INT8 LoRA bake `requant` OK).
-3. Load / sample **Nunchaku Z-Image** (SVDQ, EasyCache, etc.) in the same session.
+3. Load / sample **Nunchaku Z-Image** (SVDQ) in the same session.
 
-### 1.2 Observed log pattern
+### 1.2 Two Abort signatures (do not conflate)
 
-After INT8 succeeds, Nunchaku load reports essentially **zero GPU budget**:
+| Signature | Typical logs / site | What it usually means |
+|-----------|---------------------|------------------------|
+| **A — Zero usable VRAM handoff** | `loaded partially; 0.00 MB usable, 0.00 MB loaded, ~N GB offloaded` then `Fatal Python error: Aborted` (often Lumina `patchify_and_embed`) | INT8 **Dynamic** residency not fully released; classic Nunchaku patcher starts with empty GPU budget |
+| **B — Fused CUDA Abort with VRAM OK** | Handoff log may show unload; GPU memory looks fine; Abort in Nunchaku fused path such as `_forward_silu_gating` | Extension patches **grabbed bare `torch.int8`** (SVDQ storage) as if it were `comfy.quant_ops.QuantizedTensor` — LowVram / bake corruption |
 
-```text
-loaded partially; 0.00 MB usable, 0.00 MB loaded, ~4007 MB offloaded, ...
-0 models unloaded.
-```
+Signature **A** is the original “INT8 Dynamic left occupying accounting” problem.  
+Signature **B** is a **separate** coexistence bug: **QuantizedTensor-only** discipline broken on Nunchaku weights.
 
-Then the process dies during model initialization / first forward:
-
-```text
-Fatal Python error: Aborted
-```
-
-Stack / site of failure (typical):
-
-- ComfyUI: `comfy/ldm/lumina/model.py` → `patchify_and_embed`
-- Nunchaku path uses classic patcher (`ModelPatcher` / `ZImageModelPatcher`), **not** `ModelPatcherDynamic`
-
-### 1.3 What the numbers mean
+### 1.3 What the zero-VRAM numbers mean (signature A)
 
 | Log fragment | Meaning |
 |--------------|---------|
 | `0.00 MB usable` | Comfy decided almost **no** free GPU memory is available for this load |
-| `0.00 MB loaded` / `~4007 MB offloaded` | Weights stay off GPU (CPU / pin / offload side); GPU gets nothing useful |
+| `0.00 MB loaded` / multi-GB offloaded | Weights stay off GPU; GPU gets nothing useful |
 | `0 models unloaded` | `free_memory` did not fully remove the resident that still occupies VRAM |
 | `Fatal Python error: Aborted` | Native / CUDA path aborts when running with a non-loaded / empty GPU model |
 
-INT8 alone is fine. The failure appears at the **handoff into Nunchaku** while INT8 Dynamic residency is still present.
+INT8 alone is fine. Signature A appears at the **handoff into Nunchaku** while INT8 Dynamic residency is still present.
 
 ---
 
-## 2. Root cause (②)
+## 2. Root cause (verified)
 
-### 2.1 Two loaders, two memory models
+### 2.1 Two loaders, two memory models (signature A)
 
 | Path | Patcher | VRAM style |
 |------|---------|------------|
@@ -77,80 +68,130 @@ INT8 alone is fine. The failure appears at the **handoff into Nunchaku** while I
 
 They share one GPU and Comfy’s `current_loaded_models` / `free_memory` machinery, but they do **not** free each other’s reservations the same way.
 
-### 2.2 Why Comfy’s normal unload is not enough
+When Nunchaku requests GPU memory, Comfy often stops after **`ModelPatcherDynamic.partially_unload`**: a little VBAR is freed and the call returns **without a full `detach`**. Residual Dynamic occupancy leaves usable VRAM for the next classic load at **~0** → signature A.
 
-When Nunchaku requests GPU memory, Comfy calls `free_memory` (and related unload). For Dynamic models this often stops after **`ModelPatcherDynamic.partially_unload`**: a little VBAR is freed and the call returns **without a full `detach`**.
+### 2.2 QuantizedTensor vs bare int8 (signature B — critical)
 
-What remains:
+| Weight kind | Who owns it | Extension must |
+|-------------|-------------|----------------|
+| `comfy.quant_ops.QuantizedTensor` | HSWQ / comfy_quant INT8 | May LowVram-fix / Dynamic bake / force-detach on handoff |
+| Bare `torch.int8` tensor | Common **inside Nunchaku SVDQ** | **Must leave upstream alone** |
 
-- HostBuffers / staging / Dynamic pin state still occupy host/GPU-adjacent resources
-- Accounting still makes Comfy believe usable VRAM for the **next** classic load is **~0**
-- Nunchaku therefore starts with `0.00 MB usable` → Abort in Lumina / SVDQ forward
+If LowVramPatch or Dynamic bake treats bare int8 as comfy_quant INT8:
 
-### 2.3 What is *not* the root cause (for this Abort)
+- LoRA / dtype path dequantizes or rebakes the wrong tensors
+- Fused Nunchaku CUDA (`_forward_silu_gating`, etc.) Aborts **even when VRAM handoff already freed GPU memory**
 
-- INT8 LoRA bake succeeding on INT8 is expected; that alone does not explain Nunchaku Abort.
-- Nunchaku “being broken by itself” is not required; the same Nunchaku path can work after a clean restart (no leftover INT8 Dynamic).
-- A later **bidirectional** attempt (also detach Nunchaku before INT8 reload + reset pins) is a **different** problem: it broke INT8 **reload**. That approach was rejected; see [Appendix A](#appendix-a--rejected-bidirectional-handoff-v2).
+Comfy registers Z-Image as **`Lumina2`**. Class-name checks for `Nunchaku` / `ZImage` alone are insufficient; module scan for SVDQ / `nunchaku` is required (`_model_is_nunchaku_svdq`).
 
-### 2.4 One-sentence root cause
+### 2.3 Broken handoff API (signature A amplifier)
 
-**INT8 Dynamic VRAM is only partially unloaded; residual HostBuffer/VBAR occupancy leaves Nunchaku with zero usable VRAM, so SVDQ forward Aborts.**
+ComfyUI `ModelPatcher.detach` accepts **`unpatch_all=`**, not `unpatch_weights=`.
+
+A handoff that called `detach(unpatch_weights=True)` raised:
+
+```text
+detach failed: TypeError(... unpatch_weights ...)
+```
+
+and left INT8 Dynamic still resident → signature A returned even when “handoff code” was present.
+
+**Current correct call:** `patcher.detach(unpatch_all=True)` with `TypeError` fallback to `detach()`.
+
+### 2.4 What is *not* the root cause of INT8→Nunchaku Abort
+
+| Claim | Verdict |
+|-------|---------|
+| Pin Buffer Cache is required to stop INT8→Nunchaku Abort | **False.** PinCache is Detailer-scoped pin pooling for the **old** per-layer `cudaHostRegister` lifecycle. INT8→Nunchaku load does **not** activate `[HSWQ PinCache] ACTIVE`. See [Appendix B](#appendix-b--pin-buffer-cache-is-not-the-abort-fix). |
+| FaceDetailer pin thrash is why PinCache “fixed” Abort | **False framing.** FaceDetailer amplified **old pin Register thrash**; Batched Detailer cuts **switch count**. That is orthogonal to SVDQ Abort after INT8 Dynamic. |
+| HostBuffer / VBAR “reset theater” before Nunchaku | **Rejected.** Bidirectional park/reset broke INT8 reload ([Appendix A](#appendix-a--rejected-bidirectional-handoff-v2)). |
+| “Deleting PinCache caused Abort after `d6c87ff`” | **Correlation, not causation.** Same retest showed `detach failed: TypeError(unpatch_weights)` — handoff bug already in `e3edf77`. `d6c87ff` removed PinCache only; it did not introduce that TypeError. See [Appendix C](#appendix-c--audit-timeline-correlation--causation). |
+
+### 2.5 One-sentence root causes
+
+1. **Signature A:** INT8 Dynamic is only partially unloaded; residual occupancy leaves Nunchaku with zero usable VRAM → Abort. Fix = force-detach INT8 Dynamic with a **working** `detach` API before SVDQ load.  
+2. **Signature B:** Extension LowVram / bake paths must touch **`QuantizedTensor` only**; grabbing bare Nunchaku int8 corrupts fused CUDA → Abort with VRAM OK.
 
 ---
 
-## 3. Countermeasure overview (③)
+## 3. Countermeasure overview
 
-### 3.1 Working policy (current)
+### 3.1 Working policy (current — three parts, one file)
 
-**Unidirectional handoff only:** when `load_models_gpu` is about to load a **Nunchaku SVDQ** model, **force-detach** any **INT8 Dynamic** patchers on the same device (full `detach`, drop from `current_loaded_models`), then `free_memory(1e30)` + `soft_empty_cache`, then call the original `load_models_gpu`.
+All live in `patches/comfy_quant_int8.py`:
 
-- Trigger: `_model_is_nunchaku_svdq` on the models being loaded.
-- Target of detach: Dynamic patchers whose base has **comfy_quant** `QuantizedTensor` INT8 weights (`_model_has_int8_quantized_weights`).
-- Keep list: the Nunchaku patchers about to load (and their `model_patches_models`).
+| Part | Marker | Role |
+|------|--------|------|
+| **LowVramPatch float intermediate** | `_LV_VER = 3` | Custom path **only** when `weight` is `QuantizedTensor`; bare int8 → upstream unchanged |
+| **Dynamic INT8 LoRA bake** | `_DYN_VER = 5` | Skip SVDQ; bake only `QuantizedTensor` keys |
+| **Unidirectional VRAM handoff** | `_VER = 4` | Before Nunchaku SVDQ `load_models_gpu`, force-detach INT8 Dynamic via `detach(unpatch_all=True)`, then `free_memory(1e30)` + `soft_empty_cache` |
 
 ### 3.2 Explicit non-goals (current)
 
 | Action | Status |
 |--------|--------|
 | Force detach INT8 Dynamic before Nunchaku | **In scope (required)** |
+| LowVram / bake **QuantizedTensor-only** | **In scope (required)** |
+| Reintroduce Pin Buffer Cache for Abort | **Forbidden** — removed (`4e51074`); not an Abort countermeasure |
 | Reset Dynamic pin/VBAR for later INT8 reload | **Out of scope** (v2; broke reload) |
 | Detach Nunchaku before INT8 reload | **Out of scope** (v2; broke reload) |
 | Modify ComfyUI core | **Not done** (extension monkey-patch only) |
 
 ### 3.3 Success signals
 
-After ComfyUI restart with the patch applied (INT8 patches install on INT8 load path):
+After **full ComfyUI restart** with patches applied (INT8 load path installs patches):
+
+```text
+[HSWQ INT8] comfy_quant patches applied (... + LowVramPatch float dtype + Dynamic INT8 LoRA bake + INT8→Nunchaku VRAM handoff)
+```
+
+On INT8 → Nunchaku:
 
 ```text
 [HSWQ INT8→Nunchaku] VRAM handoff before SVDQ load (forced INT8 Dynamic unload=…)
 ```
 
-Nunchaku load must **not** show `0.00 MB usable` / `0.00 MB loaded` with multi-GB offloaded in the same failure pattern.
+Must **not** appear:
 
-### 3.4 Supporting coexistence guards (related)
+- Signature A: `0.00 MB usable` / `0.00 MB loaded` with multi-GB offloaded in the same failure pattern  
+- `detach failed: TypeError(... unpatch_weights ...)`  
+- `[HSWQ PinCache] ACTIVE` as a supposed Abort dependency (module is gone)
 
-Separately, Dynamic INT8 LoRA bake must **never** run on Nunchaku (Comfy class name is often `Lumina2`). That uses the same `_model_is_nunchaku_svdq` / `_model_has_int8_quantized_weights` helpers. See [Appendix B](#appendix-b--related-false-positive-int8-bake-on-nunchaku).
+### 3.4 Supporting coexistence guards
+
+Same helpers for handoff and bake:
+
+- `_model_is_nunchaku_svdq` — never bake / never treat as HSWQ INT8 target when SVDQ modules present  
+- `_model_has_int8_quantized_weights` — `QuantizedTensor` only; bare int8 is not comfy_quant INT8  
 
 ---
 
-## 4. Modified file names (④)
+## 4. Modified file names
 
 | Path | Role |
 |------|------|
-| `patches/comfy_quant_int8.py` | **Only file** for this coexistence handoff: SVDQ/INT8 detectors, force-detach helper, `load_models_gpu` wrapper, wiring inside `apply_comfy_quant_int8_patches()` |
+| `patches/comfy_quant_int8.py` | **Only file** for INT8↔Nunchaku coexistence: detectors, LowVram QT-only, Dynamic bake, force-detach, `load_models_gpu` wrapper |
 
-No ComfyUI core files. No separate new module. Install copy (when synced):  
+**Not** part of this Abort fix (and must stay absent for PinCache):
+
+| Path | Role |
+|------|------|
+| `nodes/hswq_pin_cache.py` | **Deleted** (`4e51074` / historically `5d37ccf`, `d6c87ff`) |
+| `nodes/hswq_batched_detailer.py` | No `hswq_pin_cache_scope` wrapper after PinCache removal |
+
+Install copy (when synced):  
 `ComfyUI/custom_nodes/ComfyUI-nunchaku-unofficial-loader/patches/comfy_quant_int8.py`.
+
+Cross-doc: PinCache history and HostBuffer supersession → `md/HSWQ_PIN_BUFFER_CACHE_REMOVAL_GUIDE.md`.
 
 ---
 
-## 5. Full text of added / modified code (⑤)
+## 5. Full text of added / modified code
 
-Source of truth: working tree `patches/comfy_quant_int8.py` as of this guide.  
-Handoff version marker in tree: `_VER = 3` (behavior = original unidirectional handoff; version bumped so a prior bidirectional `_VER = 2` wrapper is replaced on re-apply).
+Source of truth: `patches/comfy_quant_int8.py` at tip **`4e51074`** (behavior from `df9ba74` + `747b64b`).  
+Version markers: LowVram `_LV_VER = 3`, Dynamic bake `_DYN_VER = 5`, handoff `_VER = 4`.
 
-### 5.1 SVDQ / INT8 detection (helpers used by handoff and bake)
+### 5.1 SVDQ / INT8 detection
 
 ```python
 def _model_is_nunchaku_svdq(model) -> bool:
@@ -221,113 +262,91 @@ def _model_has_int8_quantized_weights(model) -> bool:
     return False
 ```
 
-### 5.2 Force detach INT8 Dynamic + `load_models_gpu` handoff (core fix)
+### 5.2 LowVramPatch — QuantizedTensor only (`_LV_VER = 3`)
+
+```python
+def _patch_lowvram_patch_float_intermediate() -> bool:
+    """Fix LowVramPatch intermediate_dtype for comfy_quant QuantizedTensor only.
+
+    Must NOT divert bare ``torch.int8`` tensors. Nunchaku SVDQ / Lumina2 use
+    int8 storage; grabbing them here corrupts fused CUDA (Abort in
+    ``_forward_silu_gating``) even when VRAM handoff already freed GPU memory.
+    """
+    # ... imports ...
+    _LV_VER = 3
+
+    def __call__(self, weight):
+        # QuantizedTensor only. Bare int8 / float / None → upstream unchanged.
+        if weight is None or not isinstance(weight, QuantizedTensor):
+            return true_orig(self, weight)
+        patches = (
+            self.prepared_patches
+            if self.prepared_patches is not None
+            else self.patches[self.key]
+        )
+        w = weight.dequantize()
+        dtype = getattr(w, "dtype", None)
+        if dtype is not None and hasattr(dtype, "is_floating_point") and dtype.is_floating_point:
+            idtype = dtype
+        else:
+            idtype = torch.float32
+        return comfy.lora.calculate_weight(patches, w, self.key, intermediate_dtype=idtype)
+
+    LowVramPatch.__call__ = __call__
+    return True
+```
+
+### 5.3 Dynamic bake — skip SVDQ; bake QuantizedTensor only (`_DYN_VER = 5`)
+
+Core guards inside bake / wrapped `Dynamic.load`:
+
+```python
+    if _model_is_nunchaku_svdq(getattr(patcher, "model", None)):
+        return 0
+    # ...
+            # Bake only comfy_quant QuantizedTensor — never bare int8 (Nunchaku).
+            if not isinstance(weight, QuantizedTensor):
+                continue
+```
+
+```python
+        # INT8 LoRA bake only — never touch Nunchaku SVDQ (class is often Lumina2).
+        if _model_is_nunchaku_svdq(self.model):
+            return result
+        if not _model_has_int8_quantized_weights(self.model) and not getattr(
+            self.model, "_hswq_int8_baked_keys", None
+        ):
+            return result
+```
+
+### 5.4 Force detach + `load_models_gpu` handoff (`_VER = 4`)
 
 ```python
 def _force_detach_int8_dynamic_models(device=None, keep_patchers=None) -> int:
     """Fully detach INT8 Dynamic VRAM models (VBAR + hostbufs).
 
-    Comfy's free_memory can stop after ModelPatcherDynamic.partially_unload
-    frees a little VBAR and return without detach. HostBuffers / staging then
-    leave Nunchaku (classic ModelPatcher / ZImageModelPatcher) with
-    ``0.00 MB usable`` → Aborted in lumina patchify_and_embed.
+    Same as e3edf77 unidirectional handoff. Only difference from that commit:
+    ``detach(unpatch_all=True)`` — ComfyUI ModelPatcher has no ``unpatch_weights``.
     """
-    try:
-        import comfy.model_management as mm
-    except ImportError:
-        return 0
-
-    keep_ids = {id(p) for p in (keep_patchers or []) if p is not None}
-    unloaded = 0
-    i = 0
-    while i < len(mm.current_loaded_models):
-        lm = mm.current_loaded_models[i]
-        patcher = lm.model
-        if patcher is None:
-            i += 1
-            continue
-        if id(patcher) in keep_ids:
-            i += 1
-            continue
-        if device is not None and getattr(lm, "device", None) is not None:
+    # ... walk current_loaded_models; require is_dynamic() + INT8 QuantizedTensor ...
+        try:
+            patcher.detach(unpatch_all=True)
+        except TypeError:
             try:
-                if str(lm.device) != str(device):
-                    i += 1
-                    continue
-            except Exception:
-                pass
-        is_dyn = False
-        try:
-            is_dyn = bool(patcher.is_dynamic())
-        except Exception:
-            is_dyn = False
-        if not is_dyn:
-            i += 1
-            continue
-        base = getattr(patcher, "model", None)
-        if base is None or not _model_has_int8_quantized_weights(base):
-            i += 1
-            continue
-        try:
-            patcher.detach(unpatch_weights=True)
+                patcher.detach()
+            except Exception as exc:
+                _console(f"[HSWQ INT8→Nunchaku] detach failed: {exc!r}")
         except Exception as exc:
             _console(f"[HSWQ INT8→Nunchaku] detach failed: {exc!r}")
-        try:
-            fin = getattr(lm, "model_finalizer", None)
-            if fin is not None:
-                fin.detach()
-        except Exception:
-            pass
-        try:
-            lm.model_finalizer = None
-            lm.real_model = None
-        except Exception:
-            pass
-        mm.current_loaded_models.pop(i)
-        unloaded += 1
-    if unloaded > 0:
-        try:
-            mm.soft_empty_cache()
-        except Exception:
-            pass
+    # ... clear finalizer / pop list / soft_empty_cache ...
     return unloaded
 
 
 def _patch_load_models_gpu_int8_nunchaku_handoff() -> bool:
     """Before Nunchaku SVDQ load, force-release INT8 Dynamic VRAM occupancy."""
-    try:
-        import comfy.model_management as mm
-    except ImportError:
-        return False
-
-    original = getattr(mm, "load_models_gpu", None)
-    if original is None:
-        return False
-    # v3 = rollback of bidirectional v2; same behavior as original unidirectional handoff.
-    _VER = 3
-    if getattr(original, "_hswq_int8_nunchaku_handoff_ver", 0) >= _VER:
-        return True
-    true_orig = getattr(original, "_hswq_orig_load_models_gpu", original)
-
-    def load_models_gpu(
-        models,
-        memory_required=0,
-        force_patch_weights=False,
-        minimum_memory_required=None,
-        force_full_load=False,
-    ):
-        keep = []
-        need_handoff = False
-        device = None
-        for m in models or []:
-            keep.append(m)
-            for mm_extra in getattr(m, "model_patches_models", lambda: [])() or []:
-                keep.append(mm_extra)
-            base = getattr(m, "model", None)
-            if _model_is_nunchaku_svdq(base) or _model_is_nunchaku_svdq(m):
-                need_handoff = True
-                if device is None:
-                    device = getattr(m, "load_device", None)
+    # v4 = e3edf77 handoff + detach(unpatch_all=True) only. No HostBuffer extras.
+    _VER = 4
+    # ... wrap mm.load_models_gpu ...
         if need_handoff:
             n = _force_detach_int8_dynamic_models(device=device, keep_patchers=keep)
             try:
@@ -340,54 +359,26 @@ def _patch_load_models_gpu_int8_nunchaku_handoff() -> bool:
                 f"[HSWQ INT8→Nunchaku] VRAM handoff before SVDQ load "
                 f"(forced INT8 Dynamic unload={n})"
             )
-        return true_orig(
-            models,
-            memory_required=memory_required,
-            force_patch_weights=force_patch_weights,
-            minimum_memory_required=minimum_memory_required,
-            force_full_load=force_full_load,
-        )
-
-    load_models_gpu._hswq_int8_nunchaku_handoff = True
-    load_models_gpu._hswq_int8_nunchaku_handoff_ver = _VER
-    load_models_gpu._hswq_orig_load_models_gpu = true_orig
-    mm.load_models_gpu = load_models_gpu
-    return True
+        return true_orig(...)
 ```
 
-### 5.3 Wiring inside `apply_comfy_quant_int8_patches`
-
-Relevant lines (same file):
+### 5.5 Wiring inside `apply_comfy_quant_int8_patches`
 
 ```python
+    ok_lowvram = _patch_lowvram_patch_float_intermediate()
     ok_dyn_bake = _patch_model_patcher_dynamic_int8_lora_bake()
     ok_handoff = _patch_load_models_gpu_int8_nunchaku_handoff()
-    if _PATCHES_APPLIED:
-        return True
     # ...
+            f"{' + LowVramPatch float dtype' if ok_lowvram else ''}"
             f"{' + Dynamic INT8 LoRA bake' if ok_dyn_bake else ''}"
             f"{' + INT8→Nunchaku VRAM handoff' if ok_handoff else ''})"
 ```
 
-Handoff installs whenever `apply_comfy_quant_int8_patches()` runs (normally when an INT8 HSWQ load path applies patches). After that, every subsequent `comfy.model_management.load_models_gpu` in the process goes through the wrapper.
-
-### 5.4 Dynamic bake skip on SVDQ (coexistence guard; same file)
-
-Inside `_patch_model_patcher_dynamic_int8_lora_bake` → wrapped `load`:
-
-```python
-        # INT8 LoRA bake only — never touch Nunchaku SVDQ (class is often Lumina2).
-        if _model_is_nunchaku_svdq(self.model):
-            return result
-        if not _model_has_int8_quantized_weights(self.model) and not getattr(
-            self.model, "_hswq_int8_baked_keys", None
-        ):
-            return result
-```
+Handoff / LowVram / bake install when `apply_comfy_quant_int8_patches()` runs (normally on INT8 HSWQ load). After that, subsequent `load_models_gpu` calls in the process go through the handoff wrapper.
 
 ---
 
-## 6. Meaning of the code (⑥)
+## 6. Meaning of the code
 
 ### 6.1 `_model_is_nunchaku_svdq`
 
@@ -395,7 +386,7 @@ Inside `_patch_model_patcher_dynamic_int8_lora_bake` → wrapped `load`:
 |---------|---------|
 | Why scan modules? | Comfy registers Z-Image as **`Lumina2`**; class-name checks for `Nunchaku` / `ZImage` miss it |
 | What counts? | Module class contains `SVDQ` / `Nunchaku`, or `ComfyNunchaku*`, or `__module__` contains `nunchaku` |
-| Role in handoff | **Only** when the models being loaded are SVDQ does handoff run |
+| Role | Gate handoff trigger, skip Dynamic bake, refuse `_model_has_int8_quantized_weights` on SVDQ graphs |
 
 ### 6.2 `_model_has_int8_quantized_weights`
 
@@ -403,34 +394,40 @@ Inside `_patch_model_patcher_dynamic_int8_lora_bake` → wrapped `load`:
 |---------|---------|
 | True only for | `comfy.quant_ops.QuantizedTensor` on non-SVDQ modules |
 | False for | Bare `torch.int8` (common inside Nunchaku) |
-| Role in detach | Only **HSWQ / comfy_quant INT8 Dynamic** patchers are force-detached; other Dynamic models are left alone |
+| Role | Only **HSWQ / comfy_quant INT8 Dynamic** patchers are force-detached; bake only those weights |
 
-### 6.3 `_force_detach_int8_dynamic_models`
+### 6.3 LowVramPatch QT-only
+
+| Step | Meaning |
+|------|---------|
+| `isinstance(weight, QuantizedTensor)` | Enter custom dequant + float `intermediate_dtype` path |
+| Else | Call **upstream** `__call__` unchanged — protects SVDQ bare int8 |
+
+Without this gate, signature **B** Aborts appear even after a successful VRAM handoff.
+
+### 6.4 Dynamic bake QT-only
+
+| Step | Meaning |
+|------|---------|
+| Skip if SVDQ | Never run comfy_quant bake on Nunchaku |
+| Skip non-`QuantizedTensor` | Never bake bare int8 storage |
+| Clear LowVram, keep `_v` | Bake via `set_weight`; do not delete VBAR bump slots (FaceDetailer 2nd-load OOM rule — bake hygiene, not PinCache) |
+
+### 6.5 `_force_detach_int8_dynamic_models` + handoff `_VER = 4`
 
 | Step | Meaning |
 |------|---------|
 | Walk `current_loaded_models` | Find live LoadedModel entries |
 | Skip keep / wrong device | Do not detach the Nunchaku about to load |
 | Require `is_dynamic()` + INT8 QuantizedTensor | Target INT8 Dynamic only |
-| `patcher.detach(unpatch_weights=True)` | Full release of Dynamic VBAR / hostbufs (stronger than `partially_unload`) |
-| Clear finalizer / real_model / pop list | Remove Comfy’s LoadedModel bookkeeping so free_memory sees them gone |
-| `soft_empty_cache` if any unloaded | Encourage CUDA to reclaim |
+| `detach(unpatch_all=True)` | Full release; **correct Comfy API** (not `unpatch_weights`) |
+| Clear finalizer / pop list | Remove bookkeeping so `free_memory` sees them gone |
+| `free_memory(1e30)` + soft cache | Make room **before** original loader runs |
 
-### 6.4 `_patch_load_models_gpu_int8_nunchaku_handoff`
+### 6.6 Why unidirectional only (owner-validated)
 
-| Step | Meaning |
-|------|---------|
-| Wrap `mm.load_models_gpu` | Intercept every GPU model load after INT8 patches apply |
-| `_VER = 3` | Re-apply over older bidirectional `_VER = 2`; **behavior** is unidirectional (same as original `_VER = 1`) |
-| Build `keep` | Incoming models + their patch models stay protected |
-| `need_handoff` | Set only if any incoming model is Nunchaku SVDQ |
-| Force detach + `free_memory(1e30)` + soft cache | Make room **before** original loader runs |
-| Log line | Auditable proof that handoff ran |
-
-### 6.5 Why unidirectional only (owner-validated)
-
-- **INT8 → Nunchaku:** force detach INT8 Dynamic → Nunchaku gets usable VRAM → Abort gone. **This works.**
-- **Nunchaku → INT8 “park + pin/VBAR reset + detach SVDQ” (v2):** intended to make INT8 reload clean; **in practice INT8 reload broke.** Owner ordered rollback; current tree must not reintroduce that path.
+- **INT8 → Nunchaku:** force detach INT8 Dynamic + QT-only LowVram/bake → Abort gone. **This works.**  
+- **Nunchaku → INT8 “park + pin/VBAR reset + detach SVDQ” (v2):** broke INT8 **reload**. Rolled back; must not reintroduce.
 
 ---
 
@@ -438,36 +435,57 @@ Inside `_patch_model_patcher_dynamic_int8_lora_bake` → wrapped `load`:
 
 ### A.1 What v2 added (do not reintroduce)
 
-1. After parking INT8 Dynamic, **reset** `hostbufs_initialized` / HostBuffer / VBAR so a later `Dynamic.load` could recreate pins.
+1. After parking INT8 Dynamic, **reset** `hostbufs_initialized` / HostBuffer / VBAR so a later `Dynamic.load` could recreate pins.  
 2. When loading INT8 Dynamic again, **detach Nunchaku SVDQ** first.
-
-Planned logs (v2 only):
-
-```text
-[HSWQ INT8→Nunchaku] park INT8 Dynamic for SVDQ (… pin/VBAR reset for reload)
-[HSWQ Nunchaku→INT8] detach SVDQ before INT8 Dynamic reload
-```
 
 ### A.2 Why it was cancelled
 
-Owner finding: **reload path broke**; unidirectional handoff is the state that **actually works**. v2 was reverted to INT8→Nunchaku-only force detach (current §5.2).
+Owner finding: **reload path broke**; unidirectional handoff is the state that **actually works**.
 
 ### A.3 Lesson
 
-Do not “complete” coexistence by symmetrically unloading Nunchaku for INT8 until a reload-safe design is proven. Prefer the minimal fix that clears INT8 Dynamic before SVDQ load.
+Do not “complete” coexistence by symmetrically unloading Nunchaku for INT8 until a reload-safe design is proven. Prefer the minimal fix: clear INT8 Dynamic before SVDQ load + never touch bare Nunchaku int8 in LowVram/bake.
 
 ---
 
-## Appendix B — Related false-positive INT8 bake on Nunchaku
+## Appendix B — Pin Buffer Cache is not the Abort fix
 
-A **separate** coexistence bug: treating Nunchaku int8 storage as comfy_quant INT8 armed **Dynamic INT8 LoRA bake** on Lumina2/SVDQ and could Abort Nunchaku even without the VRAM handoff issue.
+### B.1 What PinCache was for (v3.1.0 / removal guide)
 
-Guards (same helpers as §5.1):
+Historical **Pin Buffer Cache** pooled pin tensors to avoid **destroy `_pin` → re-`cudaHostRegister`** on every Dynamic unload. It was a dual countermeasure with **HSWQ Batched Detailer** against **old pin lifecycle thrash**.
 
-- `_model_is_nunchaku_svdq` → skip bake
-- `_model_has_int8_quantized_weights` → require `QuantizedTensor`, not bare int8
+After ComfyUI AIMDO **HostBuffer**, PinCache is **redundant and harmful**. Authoritative removal narrative: `md/HSWQ_PIN_BUFFER_CACHE_REMOVAL_GUIDE.md`, release [v3.2.0](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.0). Tree tip after Abort audit: **`4e51074`** removes PinCache again while **keeping** QT-only LowVram + `unpatch_all` handoff.
 
-This guide’s primary Abort (`0.00 MB usable` after INT8 Dynamic) is the **VRAM handoff** issue in §1–§3. Appendix B is listed so both INT8↔Nunchaku failure modes stay documented in one place.
+### B.2 Scope mismatch with INT8→Nunchaku
+
+| Fact | Implication |
+|------|-------------|
+| PinCache was Detailer-scoped (`hswq_pin_cache_scope`) | INT8→Nunchaku load path does not turn it on |
+| No `[HSWQ PinCache] ACTIVE` on Abort workflows that matter here | Cannot be the mechanism that “saved” SVDQ |
+| Batched Detailer reduces **model switch count** | Still valuable; **not** a substitute for handoff / QT-only patches |
+
+### B.3 Forbidden framing
+
+Do **not** document PinCache as:
+
+- required for INT8→Nunchaku Abort safety, or  
+- primarily “because FaceDetailer thrash” as the reason Abort returned after PinCache deletion.
+
+FaceDetailer was an **amplifier of old pin Register thrash**. Switch count is Batched Detailer’s job. Abort after INT8 Dynamic is **`comfy_quant_int8.py`** (handoff + QT-only).
+
+---
+
+## Appendix C — Audit timeline (correlation ≠ causation)
+
+| Commit | What changed | Abort-relevant truth |
+|--------|--------------|----------------------|
+| `e3edf77` | INT8→Nunchaku handoff **plus** unauthorized PinCache restore | Real handoff work **bundled** with PinCache → looked like PinCache “fixed” Abort |
+| `d6c87ff` | Remove PinCache only | Abort **returned** in retest; logs showed **`detach failed: TypeError(unpatch_weights)`** — broken API already in `e3edf77`; PinCache delete did not invent that TypeError |
+| `747b64b` | Handoff uses `detach(unpatch_all=True)` | Fixes signature A detach failure |
+| `df9ba74` | LowVram **QuantizedTensor-only** | Fixes signature B fused CUDA Abort |
+| `4e51074` | Remove PinCache **again**; keep Abort fixes | Confirms PinCache is not required for coexistence |
+
+**Rule for readers:** if PinCache deletion coincided with Abort, open the log for `detach failed` / LowVram bare-int8 symptoms before blaming pin pooling.
 
 ---
 
@@ -477,7 +495,8 @@ This guide’s primary Abort (`0.00 MB usable` after INT8 Dynamic) is the **VRAM
 |------|-------|
 | Guide path | `md/HSWQ_INT8_NUNCHAKU_COEXISTENCE_GUIDE.md` |
 | Code path | `patches/comfy_quant_int8.py` |
-| Working handoff | Unidirectional INT8 Dynamic → Nunchaku |
-| Rejected handoff | Bidirectional park/reset + Nunchaku→INT8 detach |
+| Working fixes | Unidirectional handoff `_VER=4` + LowVram `_LV_VER=3` + Dynamic bake `_DYN_VER=5` |
+| Rejected | Bidirectional HostBuffer theater; PinCache as Abort countermeasure |
+| Related | `md/HSWQ_PIN_BUFFER_CACHE_REMOVAL_GUIDE.md`, v3.2.0, tip `4e51074` |
 
 End of guide.
