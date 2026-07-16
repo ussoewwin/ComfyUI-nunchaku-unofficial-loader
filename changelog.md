@@ -1,5 +1,12 @@
 # Changelog
 
+## Version 3.2.1
+
+- **Fixed**: INT8 HSWQ (Dynamic VRAM) → Nunchaku SVDQ coexistence Abort — LowVramPatch and Dynamic LoRA bake restricted to `comfy.quant_ops.QuantizedTensor` only (never bare `torch.int8`); unidirectional VRAM handoff uses `detach(unpatch_all=True)` before SVDQ load.
+- **Removed**: Reintroduced **HSWQ Pin Buffer Cache** again (not required for the Abort fix; Detailer-scoped pin pooling remains obsolete after AIMDO HostBuffer).
+- **Docs**: Rewrote `md/HSWQ_INT8_NUNCHAKU_COEXISTENCE_GUIDE.md` for verified Abort causes vs PinCache correlation.
+- See [Release Notes v3.2.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.1) for details.
+
 ## Version 3.2.0
 
 - **Removed**: **HSWQ Pin Buffer Cache** (`nodes/hswq_pin_cache.py` and Detailer `hswq_pin_cache_scope`) — redundant after ComfyUI Dynamic VRAM / AIMDO `HostBuffer` updates (no thrashing `unpin` path). Batched Detailer three-phase flow kept; use native ComfyUI pin behavior.
