@@ -1,10 +1,10 @@
 # SDXL INT8 Normal Generation Break — Handoff False-Positive Fix (Complete Guide)
 
-**Date of record:** 2026-07-16  
+**Date:** 2026-07-16  
 **Repository:** `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
 **Primary file:** `patches/comfy_quant_int8.py`  
 **Handoff marker after this fix:** `_VER = 10` (`_hswq_int8_nunchaku_handoff_ver`)  
-**Live Comfy sync target (owner install):**  
+**Live Comfy sync target:**  
 `D:\USERFILES\ComfyUI\ComfyUI\custom_nodes\ComfyUI-nunchaku-unofficial-loader\patches\comfy_quant_int8.py`
 
 This guide documents **only** the SDXL / native comfy_quant INT8 **normal generation** breakage caused by a **false-positive Nunchaku SVDQ detector** that armed the **INT8→Nunchaku VRAM handoff** on non-SVDQ loads. It is separate from the coexistence Abort guide (`md/HSWQ_INT8_NUNCHAKU_COEXISTENCE_GUIDE.md`), which covers the legitimate INT8 Dynamic → real SVDQ handoff path.
@@ -28,7 +28,7 @@ This guide documents **only** the SDXL / native comfy_quant INT8 **normal genera
 
 - **Workflow:** Load an **SDXL HSWQ / comfy_quant INT8** checkpoint and run **normal generation** (e.g. KSampler). No Nunchaku SVDQ / Z-Image model is required for the failure.
 - **Output:** Broken images — typically **black** and/or **salt-and-pepper noise** (and related unusable samples).
-- **Scope note:** The bug is not “SDXL-only” in mechanism. Any architecture that uses this extension’s INT8 Conv2d (module path contains the substring `nunchaku` from the custom-node folder name) could false-trigger. SDXL INT8 normal gen was the owner’s concrete broken case.
+- **Scope note:** The bug is not “SDXL-only” in mechanism. Any architecture that uses this extension’s INT8 Conv2d (module path contains the substring `nunchaku` from the custom-node folder name) could false-trigger. SDXL INT8 normal gen was the primary concrete broken case I encountered.
 
 ### 1.2 Misleading console signal
 
@@ -40,15 +40,14 @@ When the false positive armed handoff, the console could show the coexistence ba
 
 **Interpretation:** That line on a pure SDXL INT8 normal-gen session means the handoff wrapper treated the graph as Nunchaku SVDQ. After the fix, that line must **not** appear on SDXL / native INT8 / non-SVDQ loads.
 
-### 1.3 What was *not* the problem definition
+### 1.3 Scope of the problem
 
-- This incident is about **ordinary generation** with SDXL INT8.
-- Do not reframe it as a separate diagnostic topic using owner-forbidden wording.
-- Coexistence Abort (`0.00 MB usable` when switching **into** real Nunchaku) is a **different** failure mode; the handoff exists for that path. This guide is about handoff running when it **must not**.
+- This incident is strictly about **ordinary generation** with SDXL INT8.
+- Coexistence Abort (`0.00 MB usable` when switching **into** real Nunchaku) is a **different** failure mode; the handoff exists for that path. This guide focuses entirely on the handoff incorrectly triggering when it **must not**.
 
 ### 1.4 Related damage path (same detector)
 
-The same `_model_is_nunchaku_svdq` gate is used elsewhere (e.g. Dynamic LoRA bake skip for real SVDQ). A false positive can also skew those branches. The **primary** owner-facing break for normal gen was **handoff + `force_full_load` mis-arm**.
+The same `_model_is_nunchaku_svdq` gate is used elsewhere (e.g. Dynamic LoRA bake skip for real SVDQ). A false positive can also skew those branches. The **primary** break for normal generation was the **handoff + `force_full_load` mis-arm**.
 
 ---
 
@@ -91,9 +90,9 @@ This extension lives under a custom-node directory whose name contains **`nuncha
 
 Substring match cannot tell these apart.
 
-### 2.4 Human / process cause (recorded)
+### 2.4 Design flaw
 
-The coexistence handoff was attached to a **sloppy global detector** and allowed to fire on every `load_models_gpu` without a hard “native INT8 → never handoff” branch. Regression on **SDXL INT8 normal generation** was not treated as the primary definition of the bug until the owner forced that definition.
+The coexistence handoff was originally attached to a **broad global detector** and allowed to fire on every `load_models_gpu` without a hard “native INT8 → never handoff” branch. This overly aggressive detection logic is what caused the regression on **SDXL INT8 normal generation**.
 
 ---
 
@@ -121,15 +120,15 @@ Inside the `load_models_gpu` wrapper, for each ModelPatcher’s **BaseModel** (`
 
 Do **not** probe the ModelPatcher object alone for SVDQ (avoids extra false positives).
 
-### 3.3 Owner boundary
+### 3.3 Strict detection boundary
 
-- Not “exclude SDXL only.”
+- Not just “exclude SDXL.”
 - **No handoff on anything that is not real Nunchaku SVDQ.**
 - After Comfy restart: SDXL INT8 normal gen must **not** log `[HSWQ INT8→Nunchaku] VRAM handoff…`.
 
 ### 3.4 Install sync
 
-Repo file and the live Comfy custom_nodes copy must match. Only valid sync target for this owner:
+Repo file and the live Comfy custom_nodes copy must remain perfectly synced. The valid live target is:
 
 `D:\USERFILES\ComfyUI\ComfyUI\custom_nodes\ComfyUI-nunchaku-unofficial-loader\`
 
@@ -454,7 +453,7 @@ Legitimate coexistence tool: remove INT8 **Dynamic** residency from GPU **withou
 | Probe `m.model` only | Avoids ModelPatcher-level false positives. |
 | Console line | Should appear **only** on real SVDQ loads after INT8 coexistence handoff. |
 
-### 6.6 Verification checklist (owner)
+### 6.6 Verification checklist
 
 1. Restart ComfyUI so `_VER = 10` is applied.  
 2. Load SDXL INT8 and run **normal** generation.  
@@ -468,7 +467,6 @@ Legitimate coexistence tool: remove INT8 **Dynamic** residency from GPU **withou
 
 - Coexistence Abort / legitimate handoff narrative: `md/HSWQ_INT8_NUNCHAKU_COEXISTENCE_GUIDE.md`  
 - Pin Buffer Cache removal (not this bug): `md/HSWQ_PIN_BUFFER_CACHE_REMOVAL_GUIDE.md`  
-- Incident / speech / “past maximum” record (owner): `records/` (not a substitute for this technical guide)
 
 ---
 
