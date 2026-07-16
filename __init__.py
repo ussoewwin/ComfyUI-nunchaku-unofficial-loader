@@ -149,7 +149,9 @@ mm.unet_offload_device = unet_offload_device_patched
 
 from .utils import get_package_version, get_plugin_version
 
-# PinCache / PinDebug must NOT install (removed; ComfyUI hostbuf handles pin).
+# PinCache / PinDebug must NOT install at import (or anywhere globally).
+# Detailer-only: nodes/hswq_pin_cache.py via hswq_pin_cache_scope in
+# HSWQBatchedDetailer.doit. Native ComfyUI pin elsewhere (Nunchaku / Z-Image).
 # INT8 comfy_quant patches are NOT applied at import — only when an
 # INT8 HSWQ / SDXL load path calls apply_comfy_quant_int8_patches().
 # Dynamic INT8 LoRA bake must detect comfy QuantizedTensor only — never bare

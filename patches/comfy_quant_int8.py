@@ -873,12 +873,16 @@ def _patch_ops_decode_and_conv() -> bool:
 
 
 def _patch_lowvram_patch_float_intermediate() -> bool:
-    """Fix LowVramPatch intermediate_dtype for INT8 / QuantizedTensor weights.
+    """Fix LowVramPatch intermediate_dtype for comfy_quant QuantizedTensor only.
 
     Upstream LowVramPatch passes intermediate_dtype=weight.dtype. When the
-    weight is still int8/Char (or a QuantizedTensor), LoRA matmul casts to
+    weight is still a QuantizedTensor (int8 storage), LoRA matmul casts to
     int8 and either errors or silently produces a no-op delta — same bug as
     BobJohnson24/ComfyUI-INT8-Fast#76.
+
+    Must NOT divert bare ``torch.int8`` tensors. Nunchaku SVDQ / Lumina2 use
+    int8 storage; grabbing them here corrupts fused CUDA (Abort in
+    ``_forward_silu_gating``) even when VRAM handoff already freed GPU memory.
     """
     try:
         import torch
@@ -892,33 +896,23 @@ def _patch_lowvram_patch_float_intermediate() -> bool:
     if LowVramPatch is None:
         return False
     original = getattr(LowVramPatch, "__call__", None)
-    _LV_VER = 2
+    _LV_VER = 3
     if original is None or getattr(original, "_hswq_int8_lora_dtype_ver", 0) >= _LV_VER:
         return getattr(original, "_hswq_int8_lora_dtype", False)
     true_orig = getattr(original, "_hswq_orig_lowvram_call", original)
 
     def __call__(self, weight):
-        # Leave Non-INT8 / Nunchaku (weight is None or floating) on upstream path.
-        if weight is None:
+        # QuantizedTensor only. Bare int8 / float / None → upstream unchanged.
+        if weight is None or not isinstance(weight, QuantizedTensor):
             return true_orig(self, weight)
-        if not isinstance(weight, QuantizedTensor):
-            dtype = getattr(weight, "dtype", None)
-            if dtype is None or (
-                hasattr(dtype, "is_floating_point") and dtype.is_floating_point
-            ):
-                return true_orig(self, weight)
         patches = (
             self.prepared_patches
             if self.prepared_patches is not None
             else self.patches[self.key]
         )
-        w = weight
-        if isinstance(w, QuantizedTensor):
-            w = w.dequantize()
+        w = weight.dequantize()
         dtype = getattr(w, "dtype", None)
-        if dtype is not None and hasattr(dtype, "is_floating_point") and not dtype.is_floating_point:
-            idtype = torch.float32
-        elif dtype is not None and hasattr(dtype, "is_floating_point") and dtype.is_floating_point:
+        if dtype is not None and hasattr(dtype, "is_floating_point") and dtype.is_floating_point:
             idtype = dtype
         else:
             idtype = torch.float32
@@ -1026,15 +1020,14 @@ def _bake_int8_patches_on_dynamic_patcher(patcher, device_to) -> int:
             weight, set_func, convert_func = mp.get_key_weight(patcher.model, key)
             if weight is None:
                 continue
-            is_qt = isinstance(weight, QuantizedTensor)
-            # Bake when requant hooks exist (Linear/Conv INT8), or QT without
-            # set_func would still be broken — skip those and log below.
+            # Bake only comfy_quant QuantizedTensor — never bare int8 (Nunchaku).
+            if not isinstance(weight, QuantizedTensor):
+                continue
             if set_func is None:
-                if is_qt:
-                    _console(
-                        f"[HSWQ INT8 LoRA] WARN cannot bake {key}: "
-                        "QuantizedTensor but no set_weight (int8_round risk)"
-                    )
+                _console(
+                    f"[HSWQ INT8 LoRA] WARN cannot bake {key}: "
+                    "QuantizedTensor but no set_weight (int8_round risk)"
+                )
                 continue
             keys_to_bake.append((param_key, key))
 
@@ -1123,10 +1116,8 @@ def _patch_model_patcher_dynamic_int8_lora_bake() -> bool:
 def _force_detach_int8_dynamic_models(device=None, keep_patchers=None) -> int:
     """Fully detach INT8 Dynamic VRAM models (VBAR + hostbufs).
 
-    Comfy's free_memory can stop after ModelPatcherDynamic.partially_unload
-    frees a little VBAR and return without detach. HostBuffers / staging then
-    leave Nunchaku (classic ModelPatcher / ZImageModelPatcher) with
-    ``0.00 MB usable`` → Aborted in lumina patchify_and_embed.
+    Same as e3edf77 unidirectional handoff. Only difference from that commit:
+    ``detach(unpatch_all=True)`` — ComfyUI ModelPatcher has no ``unpatch_weights``.
     """
     try:
         import comfy.model_management as mm
@@ -1165,7 +1156,6 @@ def _force_detach_int8_dynamic_models(device=None, keep_patchers=None) -> int:
             i += 1
             continue
         try:
-            # ComfyUI ModelPatcher.detach(unpatch_all=True) — NOT unpatch_weights=
             patcher.detach(unpatch_all=True)
         except TypeError:
             try:
@@ -1205,7 +1195,7 @@ def _patch_load_models_gpu_int8_nunchaku_handoff() -> bool:
     original = getattr(mm, "load_models_gpu", None)
     if original is None:
         return False
-    # v4 = fix detach kwarg (unpatch_all, not unpatch_weights) after TypeError left HostBuffers alive.
+    # v4 = e3edf77 handoff + detach(unpatch_all=True) only. No HostBuffer extras.
     _VER = 4
     if getattr(original, "_hswq_int8_nunchaku_handoff_ver", 0) >= _VER:
         return True

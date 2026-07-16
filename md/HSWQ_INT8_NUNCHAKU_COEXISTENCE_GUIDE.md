@@ -148,7 +148,7 @@ No ComfyUI core files. No separate new module. Install copy (when synced):
 ## 5. Full text of added / modified code (⑤)
 
 Source of truth: working tree `patches/comfy_quant_int8.py` as of this guide.  
-Handoff version marker in tree: `_VER = 4` (unidirectional handoff; `detach(unpatch_all=True)` — ComfyUI API; `_VER = 3` wrongly used `unpatch_weights=` and left HostBuffers alive).
+Handoff version marker in tree: `_VER = 3` (behavior = original unidirectional handoff; version bumped so a prior bidirectional `_VER = 2` wrapper is replaced on re-apply).
 
 ### 5.1 SVDQ / INT8 detection (helpers used by handoff and bake)
 
@@ -269,13 +269,7 @@ def _force_detach_int8_dynamic_models(device=None, keep_patchers=None) -> int:
             i += 1
             continue
         try:
-            # ComfyUI ModelPatcher.detach(unpatch_all=True) — NOT unpatch_weights=
-            patcher.detach(unpatch_all=True)
-        except TypeError:
-            try:
-                patcher.detach()
-            except Exception as exc:
-                _console(f"[HSWQ INT8→Nunchaku] detach failed: {exc!r}")
+            patcher.detach(unpatch_weights=True)
         except Exception as exc:
             _console(f"[HSWQ INT8→Nunchaku] detach failed: {exc!r}")
         try:
@@ -309,8 +303,8 @@ def _patch_load_models_gpu_int8_nunchaku_handoff() -> bool:
     original = getattr(mm, "load_models_gpu", None)
     if original is None:
         return False
-    # v4 = fix detach kwarg (unpatch_all, not unpatch_weights) after TypeError left HostBuffers alive.
-    _VER = 4
+    # v3 = rollback of bidirectional v2; same behavior as original unidirectional handoff.
+    _VER = 3
     if getattr(original, "_hswq_int8_nunchaku_handoff_ver", 0) >= _VER:
         return True
     true_orig = getattr(original, "_hswq_orig_load_models_gpu", original)
@@ -418,7 +412,7 @@ Inside `_patch_model_patcher_dynamic_int8_lora_bake` → wrapped `load`:
 | Walk `current_loaded_models` | Find live LoadedModel entries |
 | Skip keep / wrong device | Do not detach the Nunchaku about to load |
 | Require `is_dynamic()` + INT8 QuantizedTensor | Target INT8 Dynamic only |
-| `patcher.detach(unpatch_all=True)` | Full release of Dynamic VBAR / hostbufs (ComfyUI kwarg; **not** `unpatch_weights`) |
+| `patcher.detach(unpatch_weights=True)` | Full release of Dynamic VBAR / hostbufs (stronger than `partially_unload`) |
 | Clear finalizer / real_model / pop list | Remove Comfy’s LoadedModel bookkeeping so free_memory sees them gone |
 | `soft_empty_cache` if any unloaded | Encourage CUDA to reclaim |
 
@@ -427,7 +421,7 @@ Inside `_patch_model_patcher_dynamic_int8_lora_bake` → wrapped `load`:
 | Step | Meaning |
 |------|---------|
 | Wrap `mm.load_models_gpu` | Intercept every GPU model load after INT8 patches apply |
-| `_VER = 4` | Re-apply over `_VER = 3` (bad `unpatch_weights` kwarg); unidirectional handoff with working `detach` |
+| `_VER = 3` | Re-apply over older bidirectional `_VER = 2`; **behavior** is unidirectional (same as original `_VER = 1`) |
 | Build `keep` | Incoming models + their patch models stay protected |
 | `need_handoff` | Set only if any incoming model is Nunchaku SVDQ |
 | Force detach + `free_memory(1e30)` + soft cache | Make room **before** original loader runs |
