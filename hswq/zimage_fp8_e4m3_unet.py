@@ -959,7 +959,7 @@ class HSWQFP8E4M3UNetLoader:
     FUNCTION = "load_unet"
 
     CATEGORY = "advanced/loaders"
-    TITLE = "HSWQ FP8 E4M3 UNet Loader"
+    TITLE = "HSWQ FP8 E4M3/INT8 UNet Loader"
 
     def load_unet(self, unet_name, weight_dtype):
         model_options = {}

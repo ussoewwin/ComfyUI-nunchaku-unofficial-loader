@@ -548,21 +548,70 @@ def _should_inject_int8_conv(quant_config) -> bool:
     return _quant_config_has_int8_tensorwise(quant_config)
 
 
+def _model_is_nunchaku_svdq(model) -> bool:
+    """True when BaseModel / NextDiT carries Nunchaku SVDQ modules.
+
+    ComfyUI registers Z-Image as ``Lumina2`` — classname checks for
+    ``Nunchaku`` / ``ZImage`` miss that. Any SVDQ / ComfyNunchaku module means
+    never run comfy_quant INT8 Dynamic LoRA bake.
+    """
+    if model is None:
+        return False
+    roots = [model]
+    dm = getattr(model, "diffusion_model", None)
+    if dm is not None:
+        roots.append(dm)
+    inner = getattr(model, "model", None)
+    if inner is not None and inner is not model:
+        roots.append(inner)
+        dm2 = getattr(inner, "diffusion_model", None)
+        if dm2 is not None:
+            roots.append(dm2)
+    seen = set()
+    for root in roots:
+        rid = id(root)
+        if rid in seen:
+            continue
+        seen.add(rid)
+        try:
+            named = root.named_modules()
+        except Exception:
+            continue
+        for _, module in named:
+            cls_name = type(module).__name__
+            if (
+                "SVDQ" in cls_name
+                or "Nunchaku" in cls_name
+                or cls_name.startswith("ComfyNunchaku")
+            ):
+                return True
+            mod = getattr(type(module), "__module__", "") or ""
+            if "nunchaku" in mod.lower():
+                return True
+    return False
+
+
 def _model_has_int8_quantized_weights(model) -> bool:
-    """True if model already carries INT8 / QuantizedTensor weights (post-load)."""
+    """True only for native comfy_quant INT8 (comfy.quant_ops.QuantizedTensor).
+
+    Must NOT treat bare ``torch.int8`` weights as comfy_quant INT8.
+    Nunchaku SVDQ / Z-Image / Lumina2 modules often use int8 storage; a false
+    positive here arms Dynamic.load INT8 LoRA bake and can Abort those paths.
+    """
+    if _model_is_nunchaku_svdq(model):
+        return False
     try:
-        import torch
         from comfy.quant_ops import QuantizedTensor
     except ImportError:
         return False
     for _, module in model.named_modules():
+        cls_name = type(module).__name__
+        if "SVDQ" in cls_name or "Nunchaku" in cls_name:
+            continue
         w = getattr(module, "weight", None)
         if w is None:
             continue
         if isinstance(w, QuantizedTensor):
-            return True
-        dtype = getattr(w, "dtype", None)
-        if dtype is not None and dtype in (torch.int8, getattr(torch, "qint8", torch.int8)):
             return True
     return False
 
@@ -843,10 +892,21 @@ def _patch_lowvram_patch_float_intermediate() -> bool:
     if LowVramPatch is None:
         return False
     original = getattr(LowVramPatch, "__call__", None)
-    if original is None or getattr(original, "_hswq_int8_lora_dtype", False):
+    _LV_VER = 2
+    if original is None or getattr(original, "_hswq_int8_lora_dtype_ver", 0) >= _LV_VER:
         return getattr(original, "_hswq_int8_lora_dtype", False)
+    true_orig = getattr(original, "_hswq_orig_lowvram_call", original)
 
     def __call__(self, weight):
+        # Leave Non-INT8 / Nunchaku (weight is None or floating) on upstream path.
+        if weight is None:
+            return true_orig(self, weight)
+        if not isinstance(weight, QuantizedTensor):
+            dtype = getattr(weight, "dtype", None)
+            if dtype is None or (
+                hasattr(dtype, "is_floating_point") and dtype.is_floating_point
+            ):
+                return true_orig(self, weight)
         patches = (
             self.prepared_patches
             if self.prepared_patches is not None
@@ -865,6 +925,8 @@ def _patch_lowvram_patch_float_intermediate() -> bool:
         return comfy.lora.calculate_weight(patches, w, self.key, intermediate_dtype=idtype)
 
     __call__._hswq_int8_lora_dtype = True
+    __call__._hswq_int8_lora_dtype_ver = _LV_VER
+    __call__._hswq_orig_lowvram_call = true_orig
     LowVramPatch.__call__ = __call__
     return True
 
@@ -932,6 +994,8 @@ def _bake_int8_patches_on_dynamic_patcher(patcher, device_to) -> int:
       Keep ``_v``. Clear LowVramPatch, bake, then pop patches + drop the
       pre-bake backup entry so restore_loaded_backups does not undo bake.
     """
+    if _model_is_nunchaku_svdq(getattr(patcher, "model", None)):
+        return 0
     if not getattr(patcher, "patches", None):
         return 0
     try:
@@ -1017,7 +1081,7 @@ def _patch_model_patcher_dynamic_int8_lora_bake() -> bool:
     original = getattr(Dynamic, "load", None)
     if original is None:
         return False
-    _DYN_VER = 4
+    _DYN_VER = 5
     if getattr(original, "_hswq_int8_lora_bake_ver", 0) >= _DYN_VER:
         return True
     true_orig = getattr(original, "_hswq_orig_dynamic_load", original)
@@ -1031,7 +1095,9 @@ def _patch_model_patcher_dynamic_int8_lora_bake() -> bool:
             full_load=full_load,
             dirty=dirty,
         )
-        # INT8 LoRA bake only — skip for Nunchaku / FP8 / plain bf16 Dynamic loads.
+        # INT8 LoRA bake only — never touch Nunchaku SVDQ (class is often Lumina2).
+        if _model_is_nunchaku_svdq(self.model):
+            return result
         if not _model_has_int8_quantized_weights(self.model) and not getattr(
             self.model, "_hswq_int8_baked_keys", None
         ):
@@ -1051,6 +1117,137 @@ def _patch_model_patcher_dynamic_int8_lora_bake() -> bool:
     load._hswq_int8_lora_bake_ver = _DYN_VER
     load._hswq_orig_dynamic_load = true_orig
     Dynamic.load = load
+    return True
+
+
+def _force_detach_int8_dynamic_models(device=None, keep_patchers=None) -> int:
+    """Fully detach INT8 Dynamic VRAM models (VBAR + hostbufs).
+
+    Comfy's free_memory can stop after ModelPatcherDynamic.partially_unload
+    frees a little VBAR and return without detach. HostBuffers / staging then
+    leave Nunchaku (classic ModelPatcher / ZImageModelPatcher) with
+    ``0.00 MB usable`` → Aborted in lumina patchify_and_embed.
+    """
+    try:
+        import comfy.model_management as mm
+    except ImportError:
+        return 0
+
+    keep_ids = {id(p) for p in (keep_patchers or []) if p is not None}
+    unloaded = 0
+    i = 0
+    while i < len(mm.current_loaded_models):
+        lm = mm.current_loaded_models[i]
+        patcher = lm.model
+        if patcher is None:
+            i += 1
+            continue
+        if id(patcher) in keep_ids:
+            i += 1
+            continue
+        if device is not None and getattr(lm, "device", None) is not None:
+            try:
+                if str(lm.device) != str(device):
+                    i += 1
+                    continue
+            except Exception:
+                pass
+        is_dyn = False
+        try:
+            is_dyn = bool(patcher.is_dynamic())
+        except Exception:
+            is_dyn = False
+        if not is_dyn:
+            i += 1
+            continue
+        base = getattr(patcher, "model", None)
+        if base is None or not _model_has_int8_quantized_weights(base):
+            i += 1
+            continue
+        try:
+            patcher.detach(unpatch_weights=True)
+        except Exception as exc:
+            _console(f"[HSWQ INT8→Nunchaku] detach failed: {exc!r}")
+        try:
+            fin = getattr(lm, "model_finalizer", None)
+            if fin is not None:
+                fin.detach()
+        except Exception:
+            pass
+        try:
+            lm.model_finalizer = None
+            lm.real_model = None
+        except Exception:
+            pass
+        mm.current_loaded_models.pop(i)
+        unloaded += 1
+    if unloaded > 0:
+        try:
+            mm.soft_empty_cache()
+        except Exception:
+            pass
+    return unloaded
+
+
+def _patch_load_models_gpu_int8_nunchaku_handoff() -> bool:
+    """Before Nunchaku SVDQ load, force-release INT8 Dynamic VRAM occupancy."""
+    try:
+        import comfy.model_management as mm
+    except ImportError:
+        return False
+
+    original = getattr(mm, "load_models_gpu", None)
+    if original is None:
+        return False
+    # v3 = rollback of bidirectional v2; same behavior as original unidirectional handoff.
+    _VER = 3
+    if getattr(original, "_hswq_int8_nunchaku_handoff_ver", 0) >= _VER:
+        return True
+    true_orig = getattr(original, "_hswq_orig_load_models_gpu", original)
+
+    def load_models_gpu(
+        models,
+        memory_required=0,
+        force_patch_weights=False,
+        minimum_memory_required=None,
+        force_full_load=False,
+    ):
+        keep = []
+        need_handoff = False
+        device = None
+        for m in models or []:
+            keep.append(m)
+            for mm_extra in getattr(m, "model_patches_models", lambda: [])() or []:
+                keep.append(mm_extra)
+            base = getattr(m, "model", None)
+            if _model_is_nunchaku_svdq(base) or _model_is_nunchaku_svdq(m):
+                need_handoff = True
+                if device is None:
+                    device = getattr(m, "load_device", None)
+        if need_handoff:
+            n = _force_detach_int8_dynamic_models(device=device, keep_patchers=keep)
+            try:
+                if device is not None:
+                    mm.free_memory(1e30, device, keep_loaded=[], for_dynamic=False)
+                mm.soft_empty_cache()
+            except Exception as exc:
+                _console(f"[HSWQ INT8→Nunchaku] free_memory handoff failed: {exc!r}")
+            _console(
+                f"[HSWQ INT8→Nunchaku] VRAM handoff before SVDQ load "
+                f"(forced INT8 Dynamic unload={n})"
+            )
+        return true_orig(
+            models,
+            memory_required=memory_required,
+            force_patch_weights=force_patch_weights,
+            minimum_memory_required=minimum_memory_required,
+            force_full_load=force_full_load,
+        )
+
+    load_models_gpu._hswq_int8_nunchaku_handoff = True
+    load_models_gpu._hswq_int8_nunchaku_handoff_ver = _VER
+    load_models_gpu._hswq_orig_load_models_gpu = true_orig
+    mm.load_models_gpu = load_models_gpu
     return True
 
 
@@ -1492,6 +1689,7 @@ def apply_comfy_quant_int8_patches() -> bool:
     ok_torch = _patch_load_torch_file_lora_name()
     ok_lowvram = _patch_lowvram_patch_float_intermediate()
     ok_dyn_bake = _patch_model_patcher_dynamic_int8_lora_bake()
+    ok_handoff = _patch_load_models_gpu_int8_nunchaku_handoff()
     if _PATCHES_APPLIED:
         return True
     ok_utils = _patch_convert_old_quants()
@@ -1507,7 +1705,8 @@ def apply_comfy_quant_int8_patches() -> bool:
             f"{' + LoRA key counts' if ok_keys else ''}"
             f"{' + LoRA name' if ok_name or ok_path or ok_torch else ''}"
             f"{' + LowVramPatch float dtype' if ok_lowvram else ''}"
-            f"{' + Dynamic INT8 LoRA bake' if ok_dyn_bake else ''})"
+            f"{' + Dynamic INT8 LoRA bake' if ok_dyn_bake else ''}"
+            f"{' + INT8→Nunchaku VRAM handoff' if ok_handoff else ''})"
         )
         return True
     logger.warning(
