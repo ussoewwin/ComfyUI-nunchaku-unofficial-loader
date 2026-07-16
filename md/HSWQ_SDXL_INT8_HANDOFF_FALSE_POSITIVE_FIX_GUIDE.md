@@ -468,7 +468,7 @@ Legitimate coexistence tool: remove INT8 **Dynamic** residency from GPU **withou
 
 - Coexistence Abort / legitimate handoff narrative: `md/HSWQ_INT8_NUNCHAKU_COEXISTENCE_GUIDE.md`  
 - Pin Buffer Cache removal (not this bug): `md/HSWQ_PIN_BUFFER_CACHE_REMOVAL_GUIDE.md`  
-- Incident / speech / “past maximum” record (owner): `反省文/` (not a substitute for this technical guide)
+- Incident / speech / “past maximum” record (owner): `records/` (not a substitute for this technical guide)
 
 ---
 
