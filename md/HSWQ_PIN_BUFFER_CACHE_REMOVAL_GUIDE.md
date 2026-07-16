@@ -1,6 +1,6 @@
 # HSWQ Pin Buffer Cache Removal — Complete Technical Guide
 
-**Date of record:** 2026-07-16  
+**Date:** 2026-07-16  
 **Repository:** `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
 **Removal commit:** `5d37ccfb03340c4cd1a84075ab78ce2fad452985`  
 **Parent (pre-removal tip):** `9fdfae3`  
@@ -391,7 +391,7 @@ See **[Appendix A](#appendix-a--deleted-nodeshswq_pin_cachepy-full)** for the **
 
 ---
 
-## Cross-reference — problem → owner matrix
+## Cross-reference — problem → responsibility matrix
 
 ```text
 cudaHostRegister thrash on per-buffer destroy/recreate

@@ -1,6 +1,6 @@
 # HSWQ INT8 and Nunchaku Coexistence — Complete Technical Guide
 
-**Date of record:** 2026-07-16 (rewritten after PinCache / Abort causation audit)  
+**Date:** 2026-07-16 (rewritten after PinCache / Abort causation audit)  
 **Repository:** `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
 **Primary file:** `patches/comfy_quant_int8.py`  
 **Authoritative tree tip for this rewrite:** `4e51074` (`fix: remove Detailer Pin Buffer Cache again`) on top of `df9ba74` / `747b64b`  
@@ -424,7 +424,7 @@ Without this gate, signature **B** Aborts appear even after a successful VRAM ha
 | Clear finalizer / pop list | Remove bookkeeping so `free_memory` sees them gone |
 | `free_memory(1e30)` + soft cache | Make room **before** original loader runs |
 
-### 6.6 Why unidirectional only (owner-validated)
+### 6.6 Why unidirectional only (validated)
 
 - **INT8 → Nunchaku:** force detach INT8 Dynamic + QT-only LowVram/bake → Abort gone. **This works.**  
 - **Nunchaku → INT8 “park + pin/VBAR reset + detach SVDQ” (v2):** broke INT8 **reload**. Rolled back; must not reintroduce.
@@ -440,7 +440,7 @@ Without this gate, signature **B** Aborts appear even after a successful VRAM ha
 
 ### A.2 Why it was cancelled
 
-Owner finding: **reload path broke**; unidirectional handoff is the state that **actually works**.
+Finding: **reload path broke**; unidirectional handoff is the state that **actually works**.
 
 ### A.3 Lesson
 

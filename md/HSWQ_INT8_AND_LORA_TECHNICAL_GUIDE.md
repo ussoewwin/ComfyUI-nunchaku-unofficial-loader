@@ -1,6 +1,6 @@
 # HSWQ INT8 (comfy_quant) and LoRA Support — Technical Implementation Manual
 
-Date of record: 2026-07-12  
+Date: 2026-07-12  
 Repository: `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
 Feature commit: `516ac28` — `feat: native comfy_quant INT8 load, LoRA bake Status, fix Dynamic VBAR OOM`  
 Package version at time of record: `3.1.8` (no version bump / tag / GitHub Release for this change)

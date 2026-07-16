@@ -2,7 +2,7 @@
 
 This document describes the **HSWQ Save Image** output node and the **Auto `upscale_by` / `target_height`** enhancement to **HSWQ&Nunchaku Ultimate SD Upscale** (`NunchakuUltimateSDUpscale`).
 
-Date of record: 2026-06-24  
+Date: 2026-06-24  
 Repository: `ComfyUI-nunchaku-unofficial-loader`
 
 ---
@@ -457,7 +457,7 @@ Auto mode only changes **how `scale` is chosen** before this pipeline.
 | `README.md` | User-facing feature summary |
 | `md/USDU_PATCH_FIX_DOCUMENTATION.md` | USDU bundle integration, `_to_fp32_image`, `batch_size` |
 | `md/NUNCHAKU_USDU_FIX_REPORT.md` | `INPUT_TYPES` registration robustness |
-| `md/reflection_2026_06_24.md` | Development notes (naming, revert history) |
+
 
 ---
 
