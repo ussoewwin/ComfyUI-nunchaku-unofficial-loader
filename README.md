@@ -174,6 +174,31 @@ Model switches drop from **O(3n)** to **O(2)** (one VAE load, one UNet load per 
 
 **Requirement**: [ComfyUI-Impact-Pack](https://github.com/ltdrdata/ComfyUI-Impact-Pack) (or equivalent that provides the DetailerForEach SEGS behavior) is required.
 
+### HSWQ Sampler
+
+<img src="png/sampler.png" alt="HSWQ Sampler" width="400">
+
+A KSampler-equivalent node that behaves exactly like the standard ComfyUI KSampler, but **automatically adds all of RES4LYF's samplers and schedulers** when [RES4LYF](https://github.com/ClownsharkBatwing/RES4LYF) is installed. It reproduces the dynamic sampler generation logic found in Forge so that the full Runge-Kutta (`rk_beta`) sampler family stays selectable and runnable in vanilla ComfyUI.
+
+#### Why this node exists
+
+In Forge, RES4LYF's `beta/__init__.py` dynamically generates wrapper functions calling `sample_rk_beta` for every entry in `RK_SAMPLER_NAMES_BETA_NO_FOLDERS` (100+ RK samplers) and registers them into `extra_samplers`. The ComfyUI version of RES4LYF does not contain this logic, so many of those samplers become unselectable from the standard KSampler. This node supplements that missing difference.
+
+#### Features
+
+- **Standard KSampler behavior**: Same inputs (`model`, `seed`, `steps`, `cfg`, `sampler_name`, `scheduler`, `positive`, `negative`, `latent_image`, `denoise`) and output (`LATENT`); backed by `nodes.common_ksampler`
+- **Automatic RES4LYF sampler discovery**: Scans `sys.modules` at `INPUT_TYPES` time, handling both `RES4LYF` and `custom_nodes.RES4LYF` module names (with a partial-match fallback), so load order does not matter
+- **Forge-identical RK wrapper generation**: Builds `sample_fn` / `sample_ode_fn` closures for all RK sampler names, auto-generating ODE variants while excluding implicit samplers (gauss-legendre, radau, lobatto, etc.)
+- **Reliable re-injection**: Registers every sampler into both `KSampler.SAMPLERS` (UI selectable) and `comfy.k_diffusion.sampling` via `setattr` (actual inference), guarding against RES4LYF's `importlib.reload()` wiping out function references
+- **Scheduler merge**: Includes ComfyUI's `SCHEDULER_HANDLERS` in addition to the standard scheduler list
+
+#### Usage Notes
+
+- **Optional dependency**: Without RES4LYF installed, it works as a plain KSampler
+- **Category**: `sampling`
+- **Extensibility**: Designed as a thin UI wrapper so future HSWQ / Z-Image quantized-inference arguments can be intercepted in `sample()` without patching the ComfyUI core
+- **Details**: See `md/hswq_sampler_technical_reference.md`
+
 ### Nunchaku-ussoewwin Z-Image-Turbo DiT Loader
 
 ⚠️ **WARNING**: This is an **unofficial experimental loader** created as a prototype before the release of ComfyUI-Nunchaku 1.1.0. This is the author's personal testing environment. **Do not use this node.**
