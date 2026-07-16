@@ -548,12 +548,42 @@ def _should_inject_int8_conv(quant_config) -> bool:
     return _quant_config_has_int8_tensorwise(quant_config)
 
 
+def _module_path_is_real_nunchaku_package(mod: str) -> bool:
+    """True only for real Nunchaku package modules — never this unofficial-loader.
+
+    INT8 Conv2d from this extension lives under a path containing ``nunchaku``;
+    a bare ``\"nunchaku\" in path`` false-positive armed VRAM handoff on
+    non-SVDQ loads (SDXL INT8 and any other architecture using those Conv2d)
+    and destroyed normal generation. Substring match is forbidden.
+    """
+    mod_l = (mod or "").lower().replace("\\", "/")
+    if not mod_l:
+        return False
+    # This extension / INT8 patch path must never count as SVDQ.
+    if (
+        "unofficial" in mod_l
+        or "comfy_quant_int8" in mod_l
+        or "nunchaku-unofficial" in mod_l
+        or "nunchaku_unofficial" in mod_l
+    ):
+        return False
+    if mod_l == "nunchaku" or mod_l.startswith("nunchaku."):
+        return True
+    if ".nunchaku." in mod_l:
+        return True
+    return False
+
+
 def _model_is_nunchaku_svdq(model) -> bool:
-    """True when BaseModel / NextDiT carries Nunchaku SVDQ modules.
+    """True only when the graph carries real Nunchaku SVDQ modules.
 
     ComfyUI registers Z-Image as ``Lumina2`` — classname checks for
     ``Nunchaku`` / ``ZImage`` miss that. Any SVDQ / ComfyNunchaku module means
     never run comfy_quant INT8 Dynamic LoRA bake.
+
+    Branch: everything that is not real SVDQ (SDXL, Flux, ZIT, native INT8,
+    FP, …) returns False. Module-path checks must not match this
+    unofficial-loader package (see ``_module_path_is_real_nunchaku_package``).
     """
     if model is None:
         return False
@@ -586,7 +616,7 @@ def _model_is_nunchaku_svdq(model) -> bool:
             ):
                 return True
             mod = getattr(type(module), "__module__", "") or ""
-            if "nunchaku" in mod.lower():
+            if _module_path_is_real_nunchaku_package(mod):
                 return True
     return False
 
@@ -1114,10 +1144,15 @@ def _patch_model_patcher_dynamic_int8_lora_bake() -> bool:
 
 
 def _force_detach_int8_dynamic_models(device=None, keep_patchers=None) -> int:
-    """Fully detach INT8 Dynamic VRAM models (VBAR + hostbufs).
+    """Offload INT8 Dynamic VRAM (VBAR + hostbufs) without destroying QT weights.
 
-    Same as e3edf77 unidirectional handoff. Only difference from that commit:
-    ``detach(unpatch_all=True)`` — ComfyUI ModelPatcher has no ``unpatch_weights``.
+    free_memory often stops after partially_unload and leaves HostBuffers, so
+    Nunchaku sees ``0.00 MB usable`` and Aborts. We must fully offload INT8
+    Dynamic models before SVDQ load.
+
+    Critical: use ``unpatch_weights=False`` / ``detach(unpatch_all=False)``.
+    ``unpatch_all=True`` unpatches INT8 QuantizedTensor + baked LoRA and causes
+    black / noise on the next normal SDXL INT8 KSampler.
     """
     try:
         import comfy.model_management as mm
@@ -1155,26 +1190,34 @@ def _force_detach_int8_dynamic_models(device=None, keep_patchers=None) -> int:
         if base is None or not _model_has_int8_quantized_weights(base):
             i += 1
             continue
+        # Preserve QT + baked LoRA; only free GPU / VBAR occupancy.
         try:
-            patcher.detach(unpatch_all=True)
+            lm.model_unload(unpatch_weights=False)
         except TypeError:
             try:
-                patcher.detach()
+                patcher.detach(unpatch_all=False)
+            except TypeError:
+                try:
+                    patcher.detach(False)
+                except Exception as exc:
+                    _console(f"[HSWQ INT8→Nunchaku] detach(False) failed: {exc!r}")
             except Exception as exc:
-                _console(f"[HSWQ INT8→Nunchaku] detach failed: {exc!r}")
+                _console(f"[HSWQ INT8→Nunchaku] detach(unpatch_all=False) failed: {exc!r}")
+            try:
+                fin = getattr(lm, "model_finalizer", None)
+                if fin is not None:
+                    fin.detach()
+            except Exception:
+                pass
+            try:
+                lm.model_finalizer = None
+                lm.real_model = None
+            except Exception:
+                pass
         except Exception as exc:
-            _console(f"[HSWQ INT8→Nunchaku] detach failed: {exc!r}")
-        try:
-            fin = getattr(lm, "model_finalizer", None)
-            if fin is not None:
-                fin.detach()
-        except Exception:
-            pass
-        try:
-            lm.model_finalizer = None
-            lm.real_model = None
-        except Exception:
-            pass
+            _console(f"[HSWQ INT8→Nunchaku] model_unload(False) failed: {exc!r}")
+            i += 1
+            continue
         mm.current_loaded_models.pop(i)
         unloaded += 1
     if unloaded > 0:
@@ -1186,7 +1229,7 @@ def _force_detach_int8_dynamic_models(device=None, keep_patchers=None) -> int:
 
 
 def _patch_load_models_gpu_int8_nunchaku_handoff() -> bool:
-    """Before Nunchaku SVDQ load, force-release INT8 Dynamic VRAM occupancy."""
+    """Before Nunchaku SVDQ load, offload INT8 Dynamic VRAM without unpatch."""
     try:
         import comfy.model_management as mm
     except ImportError:
@@ -1195,8 +1238,10 @@ def _patch_load_models_gpu_int8_nunchaku_handoff() -> bool:
     original = getattr(mm, "load_models_gpu", None)
     if original is None:
         return False
-    # v4 = e3edf77 handoff + detach(unpatch_all=True) only. No HostBuffer extras.
-    _VER = 4
+    # v10 = handoff arms ONLY for real Nunchaku SVDQ. All other loads
+    # (SDXL / Flux / ZIT / native INT8 / FP / …) pass through untouched.
+    # free_memory → model_unload(unpatch_weights=True) kills non-SVDQ INT8.
+    _VER = 10
     if getattr(original, "_hswq_int8_nunchaku_handoff_ver", 0) >= _VER:
         return True
     true_orig = getattr(original, "_hswq_orig_load_models_gpu", original)
@@ -1216,28 +1261,36 @@ def _patch_load_models_gpu_int8_nunchaku_handoff() -> bool:
             for mm_extra in getattr(m, "model_patches_models", lambda: [])() or []:
                 keep.append(mm_extra)
             base = getattr(m, "model", None)
-            if _model_is_nunchaku_svdq(base) or _model_is_nunchaku_svdq(m):
+            # Branch A: native comfy_quant INT8 (any architecture) — never handoff.
+            if base is not None and _model_has_int8_quantized_weights(base):
+                continue
+            # Branch B: only real Nunchaku SVDQ on the BaseModel arms handoff.
+            # Do not probe the ModelPatcher itself (false positives).
+            if base is not None and _model_is_nunchaku_svdq(base):
                 need_handoff = True
                 if device is None:
                     device = getattr(m, "load_device", None)
         if need_handoff:
             n = _force_detach_int8_dynamic_models(device=device, keep_patchers=keep)
+            # Second pass: any INT8 Dynamic still listed (missed first pass) —
+            # never leave them for free_memory(unpatch=True).
+            n2 = _force_detach_int8_dynamic_models(device=None, keep_patchers=keep)
             try:
-                if device is not None:
-                    mm.free_memory(1e30, device, keep_loaded=[], for_dynamic=False)
                 mm.soft_empty_cache()
             except Exception as exc:
-                _console(f"[HSWQ INT8→Nunchaku] free_memory handoff failed: {exc!r}")
+                _console(f"[HSWQ INT8→Nunchaku] soft_empty_cache failed: {exc!r}")
             _console(
                 f"[HSWQ INT8→Nunchaku] VRAM handoff before SVDQ load "
-                f"(forced INT8 Dynamic unload={n})"
+                f"(INT8 Dynamic offload keep-weights={n + n2}, no free_memory unpatch)"
             )
         return true_orig(
             models,
             memory_required=memory_required,
             force_patch_weights=force_patch_weights,
             minimum_memory_required=minimum_memory_required,
-            force_full_load=force_full_load,
+            # Full load after handoff avoids Nunchaku 0.00 MB usable Abort.
+            # Non-SVDQ loads never set need_handoff (branches A/B above).
+            force_full_load=True if need_handoff else force_full_load,
         )
 
     load_models_gpu._hswq_int8_nunchaku_handoff = True
