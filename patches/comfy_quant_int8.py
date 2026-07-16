@@ -1165,7 +1165,13 @@ def _force_detach_int8_dynamic_models(device=None, keep_patchers=None) -> int:
             i += 1
             continue
         try:
-            patcher.detach(unpatch_weights=True)
+            # ComfyUI ModelPatcher.detach(unpatch_all=True) — NOT unpatch_weights=
+            patcher.detach(unpatch_all=True)
+        except TypeError:
+            try:
+                patcher.detach()
+            except Exception as exc:
+                _console(f"[HSWQ INT8→Nunchaku] detach failed: {exc!r}")
         except Exception as exc:
             _console(f"[HSWQ INT8→Nunchaku] detach failed: {exc!r}")
         try:
@@ -1199,8 +1205,8 @@ def _patch_load_models_gpu_int8_nunchaku_handoff() -> bool:
     original = getattr(mm, "load_models_gpu", None)
     if original is None:
         return False
-    # v3 = rollback of bidirectional v2; same behavior as original unidirectional handoff.
-    _VER = 3
+    # v4 = fix detach kwarg (unpatch_all, not unpatch_weights) after TypeError left HostBuffers alive.
+    _VER = 4
     if getattr(original, "_hswq_int8_nunchaku_handoff_ver", 0) >= _VER:
         return True
     true_orig = getattr(original, "_hswq_orig_load_models_gpu", original)
