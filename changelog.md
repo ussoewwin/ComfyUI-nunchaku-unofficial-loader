@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 3.2.5
+
+- **Fixed**: `requirements.txt` install failure on outdated portable/embedded Python environments — a transitive, wheel-less source dependency (`filterpy`, pulled by `facexlib`) forced a source build that crashed with `AttributeError: module 'pkgutil' has no attribute 'ImpImporter'` on Python 3.12+ because the environment shipped an old `setuptools`. An `install.py` now upgrades `pip` / `setuptools` / `wheel` before installing `requirements.txt`, so ComfyUI-Manager install/update repairs the build tooling first and the legacy source build succeeds.
+- See [Release Notes v3.2.5](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.5) for details.
+
 ## Version 3.2.4
 
 - **Fixed**: SDXL LoRA-type ControlNet (e.g. `anytest`) producing all-black output under INT8 quantization — `ControlLora.pre_run` borrowed the INT8 base UNet weights via `diffusion_model.state_dict()`, which returned flattened raw `int8`/`uint8` tensors instead of `QuantizedTensor`, so the borrowed weights were never dequantized. The patch intercepts that `state_dict()` and dequantizes the INT8 base weights on the fly (full-weight ControlNets such as `canny` were unaffected, and the issue did not occur in FP8).
