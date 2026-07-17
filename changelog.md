@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 3.2.4
+
+- **Fixed**: SDXL LoRA-type ControlNet (e.g. `anytest`) producing all-black output under INT8 quantization — `ControlLora.pre_run` borrowed the INT8 base UNet weights via `diffusion_model.state_dict()`, which returned flattened raw `int8`/`uint8` tensors instead of `QuantizedTensor`, so the borrowed weights were never dequantized. The patch intercepts that `state_dict()` and dequantizes the INT8 base weights on the fly (full-weight ControlNets such as `canny` were unaffected, and the issue did not occur in FP8).
+- See [Release Notes v3.2.4](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.4) for details.
+
 ## Version 3.2.3
 
 - **Added**: **HSWQ Sampler** — a KSampler-equivalent node that behaves exactly like the standard ComfyUI KSampler, but automatically adds all of RES4LYF's samplers and schedulers when [RES4LYF](https://github.com/ClownsharkBatwing/RES4LYF) is installed. It reproduces Forge's dynamic sampler generation so the full Runge-Kutta (`rk_beta`) sampler family stays selectable and runnable in vanilla ComfyUI.
