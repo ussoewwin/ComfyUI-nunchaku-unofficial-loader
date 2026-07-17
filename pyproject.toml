@@ -5,8 +5,8 @@ requires = [ "setuptools>=61", "wheel" ]
 
 [project]
 name = "comfyui-nunchaku-unofficial-loader"
-version = "3.2.3"
-description = "Hybrid-Sensitivity-Weighted-Quantization fp8e4m3 UNet Loader, Upscaler, Detailer(segs)"
+version = "3.2.4"
+description = "HSWQ (Hybrid Sensitivity Weighted Quantization) FP8 E4M3 / INT8 loaders for SDXL and Z-Image, plus HSWQ Sampler, Ultimate SD Upscale, Batched Detailer (SEGS), and Save Image nodes."
 license = { file = "LICENCE.txt" }
 requires-python = ">=3.10,<3.14"
 #  Used by Comfy Registry https://comfyregistry.org
