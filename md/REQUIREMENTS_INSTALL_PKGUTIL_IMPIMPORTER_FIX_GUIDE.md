@@ -278,3 +278,9 @@ sequential pip invocations, which is why the fix lives in `install.py` and
   ```
   <python_embeded>\python.exe install.py
   ```
+
+With `install.py` in place, the ComfyUI-Manager install and update paths no longer
+require any manual step: the build tooling is upgraded automatically before
+`requirements.txt` is installed, so the `pkgutil.ImpImporter` failure on outdated
+Python 3.12+ environments is resolved. The manual commands above are only needed
+when installing dependencies by hand, without going through ComfyUI-Manager.
