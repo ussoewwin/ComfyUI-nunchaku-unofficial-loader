@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 
-__version__ = "3.2.2"
+__version__ = "3.2.3"
 
 import torch
 import yaml
