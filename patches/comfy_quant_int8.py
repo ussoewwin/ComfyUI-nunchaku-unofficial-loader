@@ -1729,6 +1729,179 @@ def _patch_load_lora_key_counts() -> bool:
     return True
 
 
+def _patch_controllora_int8_dequant() -> bool:
+    """Dequantize borrowed base-UNet quantized weights in ControlLora.pre_run.
+
+    LoRA-type ControlNets (``lora_controlnet`` marker, e.g. anytest) build a
+    control_model that BORROWS the base UNet's own weights via
+    ``diffusion_model.state_dict()`` and injects them with ``set_attr_param``.
+    The control_model uses ``ControlLoraOps`` (plain float ops); its forward
+    calls ``comfy.ops.cast_bias_weight``, which cannot reconstruct a quantized
+    weight without its scale.
+
+    Root cause (confirmed from logs + comfy/ops.py):
+    ``MixedPrecisionOps.state_dict`` (``_quantized_weight_state_dict``) does NOT
+    emit ``QuantizedTensor`` objects. It FLATTENS each quantized ``weight`` into
+    separate tensors:
+      * ``X.weight``        -> raw int8 qdata      (torch.int8)
+      * ``X.weight_scale``  -> per-tensor scale    (torch.float32)
+      * ``X.comfy_quant``   -> JSON metadata       (torch.uint8)
+      * ``X.input_scale`` / ``X.weight_scale_2`` -> extra params (fp8/nvfp4)
+    So ``ControlLora.pre_run`` injects the RAW int8 ``X.weight`` (no scale) into
+    the float control_model, and forward feeds int8 straight into
+    ``F.linear`` / ``conv2d`` -> NaN / black output. FP8 avoids this only
+    because its dtype differs from the compute dtype.
+
+    Fix: wrap ``diffusion_model.state_dict`` during ``ControlLora.pre_run`` and
+    return a DEQUANTIZED state dict: for every module whose ``.weight`` is a
+    ``QuantizedTensor``, replace ``X.weight`` with ``weight.dequantize()`` (a
+    real float tensor) and drop the now-meaningless sidecar keys
+    (``X.weight_scale``, ``X.weight_scale_2``, ``X.comfy_quant``,
+    ``X.input_scale``). All non-quant weights, biases and buffers pass through
+    unchanged. Full-weight ControlNets (Canny) never enter
+    ``ControlLora.pre_run`` and are unaffected; the real anytest LoRA weights
+    (``.up`` / ``.down``) are plain fp16 and are not touched.
+    """
+    try:
+        import comfy.controlnet as cn
+        import comfy.utils
+        from comfy.quant_ops import QuantizedTensor
+    except ImportError:
+        return False
+
+    ControlLora = getattr(cn, "ControlLora", None)
+    if ControlLora is None:
+        return False
+    original = getattr(ControlLora, "pre_run", None)
+    _CL_VER = 2
+    if original is None or getattr(original, "_hswq_int8_controllora_ver", 0) >= _CL_VER:
+        return getattr(original, "_hswq_int8_controllora", False)
+    true_orig = getattr(original, "_hswq_orig_controllora_pre_run", original)
+
+    def _dequantized_state_dict(diffusion_model, orig_sd):
+        """Return diffusion_model.state_dict() with quantized weights turned
+        back into float tensors and their scale/metadata sidecars removed.
+
+        ``orig_sd`` is the ORIGINAL bound ``state_dict`` method captured before
+        we replaced ``diffusion_model.state_dict``. It MUST be used here instead
+        of ``diffusion_model.state_dict()`` to avoid re-entering our wrapper
+        (which caused ``RecursionError: maximum recursion depth exceeded``)."""
+        full = orig_sd()
+
+        # Collect the state-dict prefix of every quantized weight.
+        quant_weight_keys = {}
+        for name, module in diffusion_model.named_modules():
+            w = getattr(module, "weight", None)
+            if isinstance(w, QuantizedTensor):
+                key = (name + "." if name else "") + "weight"
+                quant_weight_keys[key] = w
+
+        out = {}
+        n_dequant = 0
+        n_drop = 0
+        for k, v in full.items():
+            replaced = False
+            dropped = False
+            for wk, qt in quant_weight_keys.items():
+                if k == wk:
+                    # raw int8 qdata -> real float weight
+                    try:
+                        out[k] = qt.dequantize()
+                        n_dequant += 1
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(
+                            "[HSWQ INT8] ControlLora: dequantize failed for %s: %s",
+                            k, e,
+                        )
+                        out[k] = v
+                    replaced = True
+                    break
+                base = wk[: -len("weight")]  # "X."
+                if (
+                    (k.startswith(wk) and k != wk)      # X.weight_scale / weight_scale_2
+                    or k == base + "comfy_quant"        # uint8 JSON metadata
+                    or k == base + "input_scale"        # fp8 extra param
+                ):
+                    dropped = True
+                    break
+            if replaced:
+                continue
+            if dropped:
+                n_drop += 1
+                continue
+            out[k] = v
+
+        print(
+            f"[HSWQ INT8][ControlLora] dequantized state_dict: "
+            f"weights dequantized(int8->float)={n_dequant}, "
+            f"sidecar keys dropped(scale/comfy_quant/input_scale)={n_drop}, "
+            f"total keys out={len(out)}",
+            flush=True,
+        )
+        return out
+
+    def pre_run(self, model, percent_to_timestep_function):
+        diffusion_model = getattr(model, "diffusion_model", None)
+        patched = False
+        orig_sd = None
+        if diffusion_model is not None:
+            orig_sd = diffusion_model.state_dict
+
+            def dequant_state_dict(*a, **kw):
+                # Only intercept the argument-less borrow call ControlLora makes;
+                # fall back to the original for any keyword/destination usage.
+                if a or kw:
+                    return orig_sd(*a, **kw)
+                return _dequantized_state_dict(diffusion_model, orig_sd)
+
+            print(
+                "[HSWQ INT8][ControlLora] pre_run ENTER "
+                "(LoRA-type ControlNet / lora_controlnet path) "
+                "-> wrapping diffusion_model.state_dict for INT8 base-weight dequant",
+                flush=True,
+            )
+            diffusion_model.state_dict = dequant_state_dict
+            patched = True
+        else:
+            print(
+                "[HSWQ INT8][ControlLora] pre_run ENTER but model has no "
+                "diffusion_model; running unpatched",
+                flush=True,
+            )
+
+        try:
+            result = true_orig(self, model, percent_to_timestep_function)
+        finally:
+            if patched:
+                # Remove the instance-level override so the class method is used again.
+                try:
+                    del diffusion_model.state_dict
+                except AttributeError:
+                    diffusion_model.state_dict = orig_sd
+
+        print(
+            "[HSWQ INT8][ControlLora] pre_run EXIT (base weights injected as float)",
+            flush=True,
+        )
+        logger.info(
+            "[HSWQ INT8] ControlLora: injected dequantized base UNet weights "
+            "(anytest / lora_controlnet black-output fix)"
+        )
+        return result
+
+    pre_run._hswq_int8_controllora = True
+    pre_run._hswq_int8_controllora_ver = _CL_VER
+    pre_run._hswq_orig_controllora_pre_run = true_orig
+    ControlLora.pre_run = pre_run
+    print(
+        "[HSWQ INT8][ControlLora] pre_run patch INSTALLED "
+        "(v%d): borrowed INT8 base weights dequantized via state_dict wrap "
+        "for LoRA-type ControlNet (anytest fix)" % _CL_VER,
+        flush=True,
+    )
+    return True
+
+
 def apply_comfy_quant_int8_patches() -> bool:
     """Install INT8 comfy_quant patches once. Returns True if applied (or already applied)."""
     global _PATCHES_APPLIED
@@ -1739,6 +1912,7 @@ def apply_comfy_quant_int8_patches() -> bool:
     ok_lowvram = _patch_lowvram_patch_float_intermediate()
     ok_dyn_bake = _patch_model_patcher_dynamic_int8_lora_bake()
     ok_handoff = _patch_load_models_gpu_int8_nunchaku_handoff()
+    ok_controllora = _patch_controllora_int8_dequant()
     if _PATCHES_APPLIED:
         return True
     ok_utils = _patch_convert_old_quants()
@@ -1755,7 +1929,8 @@ def apply_comfy_quant_int8_patches() -> bool:
             f"{' + LoRA name' if ok_name or ok_path or ok_torch else ''}"
             f"{' + LowVramPatch float dtype' if ok_lowvram else ''}"
             f"{' + Dynamic INT8 LoRA bake' if ok_dyn_bake else ''}"
-            f"{' + INT8→Nunchaku VRAM handoff' if ok_handoff else ''})"
+            f"{' + INT8→Nunchaku VRAM handoff' if ok_handoff else ''}"
+            f"{' + ControlLora INT8 dequant' if ok_controllora else ''})"
         )
         return True
     logger.warning(
