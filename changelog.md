@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 3.2.3
+
+- **Added**: **HSWQ Sampler** — a KSampler-equivalent node that behaves exactly like the standard ComfyUI KSampler, but automatically adds all of RES4LYF's samplers and schedulers when [RES4LYF](https://github.com/ClownsharkBatwing/RES4LYF) is installed. It reproduces Forge's dynamic sampler generation so the full Runge-Kutta (`rk_beta`) sampler family stays selectable and runnable in vanilla ComfyUI.
+- See [Release Notes v3.2.3](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.3) for details.
+
 ## Version 3.2.2
 
 - **Fixed**: INT8→Nunchaku VRAM handoff false-positive on non-SVDQ loads (including SDXL INT8 normal generation) — SVDQ detection no longer uses bare `"nunchaku" in __module__` (this extension’s INT8 Conv2d path contains that substring); handoff `_VER = 10` arms only for real Nunchaku SVDQ on the BaseModel, and native comfy_quant INT8 (any architecture) never arms handoff.
