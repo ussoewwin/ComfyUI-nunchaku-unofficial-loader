@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 3.2.6
+
+- **Added**: Public INT8 W8A8 Triton Linear acceleration (Plan B) for HSWQ INT8 loaders — fused row-wise activation quant → INT8 GEMM → dequant without relying on Comfy `--enable-triton-backend`; Windows/Linux Triton install in `install.py`; UI toggle **Triton accelerate**; tiled rowwise quant so wide layers (e.g. K=10240) stay on the fused path.
+- See [Release Notes v3.2.6](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.6) for details.
+
 ## Version 3.2.5
 
 - **Fixed**: `requirements.txt` install failure on outdated portable/embedded Python environments — a transitive, wheel-less source dependency (`filterpy`, pulled by `facexlib`) forced a source build that crashed with `AttributeError: module 'pkgutil' has no attribute 'ImpImporter'` on Python 3.12+ because the environment shipped an old `setuptools`. An `install.py` now upgrades `pip` / `setuptools` / `wheel` before installing `requirements.txt`, so ComfyUI-Manager install/update repairs the build tooling first and the legacy source build succeeds.
