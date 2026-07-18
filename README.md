@@ -69,7 +69,7 @@ Restart ComfyUI to load the nodes.
 
 ### HSWQ Checkpoint Loader (SDXL)
 
-<img src="png/fp8e4m3.png" alt="HSWQ Checkpoint Loader (SDXL) Node" width="400">
+<img src="png/fp8e4m3.png?v=3" alt="HSWQ Checkpoint Loader (SDXL) Node" width="400">
 
 ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, with optional device selection and **FP8 / INT8** precision support. Use it like the standard Load Checkpoint node; it outputs MODEL and CLIP only (no VAE). Scope is **general FP8 and INT8** (including HSWQ and native comfy_quant), not limited to HSWQ-only weights.
 
@@ -148,7 +148,7 @@ ComfyUI output node that saves images to your ComfyUI **output** folder as **PNG
 
 ### HSWQ FP8 E4M3/INT8 UNet Loader
 
-<img src="png/hswqunet.png" alt="HSWQ FP8 E4M3/INT8 UNet Loader" width="400">
+<img src="png/hswqunet.png?v=3" alt="HSWQ FP8 E4M3/INT8 UNet Loader" width="400">
 
 Standard ComfyUI UNet loader wrapper that loads FP8 and INT8 diffusion models (**general FP8 and INT8**, not limited to HSWQ-only weights). Loads the UNet (MODEL) from FP8 / INT8 checkpoints like the standard UNet loader (HSWQ FP8 E4M3, Scaled FP8, and native comfy_quant / `int8_tensorwise` when selected or auto-detected).
 
