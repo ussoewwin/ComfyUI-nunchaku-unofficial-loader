@@ -5,33 +5,34 @@ Repository: `ussoewwin/ComfyUI-nunchaku-unofficial-loader`
 Canonical commit: `bf8a8a6` (`feat: add INT8 W8A8 Triton accelerate with tiled rowwise quant`)  
 Related plan: `md/INT8_TRITON_W8A8_PUBLIC_ACCELERATION_PLAN.md`
 
-This guide documents the **Plan B** public INT8 Linear (W8A8) Triton acceleration shipped inside this custom node: overview, every touched path, full source of new modules / exact modified regions, and the meaning of each piece.
+This guide records the **shipped** INT8 Linear (W8A8) Triton acceleration in this custom node: confirmed behavior, every touched path, full source of new modules / exact modified regions, and the meaning of each piece.
 
 ---
 
-## 1. Acceleration plan overview
+## 1. Confirmed overview
 
-### 1.1 Goal
+### 1.1 What this feature is
 
-Public / Manager-installed ComfyUI users must reach a **fused Triton INT8 Linear** path for HSWQ `int8_tensorwise` models **without** depending on:
+HSWQ `int8_tensorwise` loads use a **fused Triton INT8 Linear** path shipped in this extension:
 
-- ComfyUI launch flag `--enable-triton-backend`
-- A special local Comfy fork
-- Kitchen CUDA ops that many installs cannot enable
+1. Row-wise activation quantization  
+2. INT8 GEMM  
+3. Fused dequant (± bias)
 
-Success class: same algorithm family as INT8-Fast / forge kitchen (row-wise activation quant → INT8 GEMM → fused dequant ± bias). Eager / `torch._int_mm` / `F.linear` remain soft fallbacks only.
+Algorithm class matches INT8-Fast / forge kitchen fused Linear. Soft fallbacks when the fused path does not run: eager / `torch._int_mm` / `F.linear`.
 
-### 1.2 Why Plan A alone is insufficient
+### 1.2 Confirmed delivery surface
 
-| Fact | Public impact |
+| Item | Confirmed fact |
 |------|----------------|
-| Kitchen Triton is off unless `--enable-triton-backend` | Most users never get speed |
-| Kitchen often needs matching torch/CUDA kitchen builds | Flag still fails open |
-| Triton may be missing on Windows | Kernels cannot compile |
+| Runtime package | Triton installed by this repo’s `install.py` (Windows → `triton-windows<3.7`; Linux → `triton`; macOS → skipped) |
+| Entry | MixedPrecisionOps `Linear._forward` wrap in `patches/comfy_quant_int8.py` (ops patch **v2**) |
+| UI | BOOLEAN `triton_accelerate` (default **True**) + JS toggle label **Triton accelerate** |
+| Stamp | `model.model_options["hswq_triton_accelerate"]` and per-module `_hswq_triton_accelerate` on `int8_tensorwise` Linears |
+| Success log | `[HSWQ INT8 Triton] fused W8A8 Linear path active (Plan B)` |
+| Wide-K layers | Tiled rowwise quant supports **K=10240** (soft cap default 131072); the old hard 8192 column raise does not apply |
 
-Plan A (kitchen) may still help if already enabled; it is **not** the delivery mechanism.
-
-### 1.3 Plan B architecture (this repo)
+### 1.3 Architecture (this repo)
 
 ```text
 Loader UI (triton_accelerate BOOLEAN + JS toggle)
@@ -72,11 +73,11 @@ patches/_int8_triton_kernels_impl.py
 - macOS: skip (CUDA required)
 - Probe: `import triton` → READY / UNAVAILABLE
 
-### 1.6 Follow-up fix (wide K)
+### 1.6 Wide-K fix (confirmed)
 
-Z-Image INT8 FF layers use activation width **K=10240**. The first port raised if `cols > 8192`. The shipping kernel uses **tiled** `tl.range` rowwise quant (tile default 1024, soft cap 131072) so Plan B stays active on those layers. Verified runtime log: `fused W8A8 Linear path active` without the 8192 error.
+Z-Image INT8 FF layers use activation width **K=10240**. An earlier hard cap of 8192 columns aborted those launches. The shipped kernel uses **tiled** `tl.range` rowwise quant (tile default 1024, soft cap 131072). Confirmed runtime: fused path active with **no** `only supports <= 8192 … got 10240` error.
 
-### 1.7 Non-goals
+### 1.7 Confirmed scope boundaries
 
 - No global `F.linear` monkeypatch
 - No Triton attention rewrite (FA2 / SA2 / SA3 remain separate)
@@ -1156,7 +1157,7 @@ def triton_int8_linear_per_row(x: torch.Tensor, weight: torch.Tensor, weight_sca
 	return output.reshape(x_shape_orig[:-1] + (N, ))
 ```
 
-### 3.5 `patches/comfy_quant_int8.py` — Plan B helpers + Linear wrap (full contiguous block)
+### 3.5 `patches/comfy_quant_int8.py` — Triton helpers + Linear wrap (full contiguous block)
 
 ```python
 
@@ -1826,23 +1827,23 @@ class HSWQFP8E4M3UNetLoader:
 
 ---
 
-## 4. Meaning of each piece
+## 4. Meaning of each piece (confirmed)
 
 ### 4.1 Soft-import wrapper (`int8_triton_kernels.py`)
 
-| Symbol | Meaning |
-|--------|---------|
-| Soft `try/except` import of `_int8_triton_kernels_impl` | Graph load must not crash if Triton is absent |
+| Symbol | Confirmed meaning |
+|--------|-------------------|
+| Soft `try/except` import of `_int8_triton_kernels_impl` | Graph load does not crash if Triton is absent |
 | `is_triton_int8_available()` | One-shot warning + boolean for callers |
-| `cuda_sm_ok_for_triton_int8` | Plan success criterion SM ≥ 8.0 (Ampere+) |
+| `cuda_sm_ok_for_triton_int8` | Gate: SM ≥ 8.0 (Ampere+) |
 | `fused_int8_linear` | Dispatches scalar vs per-row weight scale kernels |
 
 ### 4.2 Kernel implementation (`_int8_triton_kernels_impl.py`)
 
-| Piece | Meaning |
-|-------|---------|
+| Piece | Confirmed meaning |
+|-------|-------------------|
 | Fixed config / optional `INT8_TRITON_AUTOTUNE=1` | Default fixed tiles for stable public latency; autotune opt-in |
-| `_quantize_rowwise_kernel` + `tl.range` tiles | Row absmax then quant without requiring one huge power-of-2 block → **K=10240 works** |
+| `_quantize_rowwise_kernel` + `tl.range` tiles | Row absmax then quant without one huge power-of-2 block → **K=10240 works** |
 | `_torch_quantize_rowwise` | Soft fallback for quant; GEMM can still be Triton |
 | `_int8_matmul_dequant_kernel` | `C = (A@B) * (scale_a * scale_b) + bias` with int32 accumulate |
 | `_int8_matmul_dequant_per_row_kernel` | Same with per-output-row weight scales (HSWQ tensorwise layout) |
@@ -1852,11 +1853,11 @@ Environment knobs: `INT8_TRITON_BLOCK_*`, `INT8_TRITON_ROWWISE_QUANT_TILE`, `INT
 
 ### 4.3 `comfy_quant_int8.py` wiring
 
-| Piece | Meaning |
-|-------|---------|
+| Piece | Confirmed meaning |
+|-------|-------------------|
 | `_try_triton_int8_linear` | All safety gates in one place; returns `None` to keep original path |
 | Skip `convrot` / `transposed` | Those layouts are not the plain W8A8 GEMM this kernel expects |
-| `_INT8_TRITON_TINY_M = 16` | Same class as INT8-Fast: tiny batches prefer `F.linear` |
+| `_INT8_TRITON_TINY_M = 16` | Tiny batches use `F.linear` |
 | `_patch_linear_triton_forward` | Wraps only MixedPrecisionOps `Linear._forward` — not global F.linear |
 | Ops patch **v2** | Re-applies even if older v1 Conv-only patch was already installed |
 | `_stamp_triton_accelerate` | Persists UI toggle onto `model_options` and each `int8_tensorwise` module |
@@ -1865,32 +1866,33 @@ Environment knobs: `INT8_TRITON_BLOCK_*`, `INT8_TRITON_ROWWISE_QUANT_TILE`, `INT
 
 ### 4.4 Loader UI + JS
 
-| Piece | Meaning |
-|-------|---------|
-| BOOLEAN `triton_accelerate` default True | Public default = attempt speed when Triton READY |
+| Piece | Confirmed meaning |
+|-------|-------------------|
+| BOOLEAN `triton_accelerate` default True | Default attempts fused path when Triton READY |
 | Class body accepts `triton_accelerate` but FP path ignores stamp | Stamp happens only inside INT8 helpers after dispatch |
 | JS forces `widget.type = "toggle"` | Same UX pattern as other HSWQ toggles |
 | Tooltip | Documents ON vs OFF behavior for end users |
 
 ### 4.5 `install.py` Triton stage
 
-| Piece | Meaning |
-|-------|---------|
-| After requirements | Speed path is part of normal Manager install |
-| Windows `triton-windows` | Stock Linux Triton wheels do not work on native Windows |
+| Piece | Confirmed meaning |
+|-------|-------------------|
+| After requirements | Triton stage runs on every Manager install/update of this node |
+| Windows `triton-windows` | Windows installs `triton-windows<3.7` after uninstalling stock `triton` |
+| Linux `triton` | Linux installs standard `triton` when not already importable |
 | READY / UNAVAILABLE logs | Operators can verify without reading Python exceptions |
-| No hard fail of whole install if Triton fails | INT8 still loads; speed falls back |
+| Install failure does not abort node install | INT8 still loads; fused path stays off until `import triton` succeeds |
 
-### 4.6 Runtime evidence (meaning of console lines)
+### 4.6 Runtime evidence (confirmed console lines)
 
-| Log line | Meaning |
-|----------|---------|
+| Log line (literal) | Confirmed meaning |
+|--------------------|-------------------|
 | `Triton accelerate toggle: ON (stamped N …)` | Stamp succeeded on N INT8 Linears |
-| `fused W8A8 Linear path active (Plan B)` | First successful Triton Linear launch |
-| Former `only supports <= 8192 … got 10240` | **Must not appear** after tiled quant |
-| SA3 / FA-2 restore lines | Attention backends independent of Linear GEMM |
+| `fused W8A8 Linear path active (Plan B)` | First successful fused Linear launch (string is exact as printed by code) |
+| `only supports <= 8192 … got 10240` | Does **not** appear with the shipped tiled quant |
+| SA3 / FA-2 restore lines | Attention backends are independent of Linear GEMM |
 
-### 4.7 Coexistence
+### 4.7 Coexistence (confirmed)
 
 INT8 Triton Linear acceleration is orthogonal to Flash-Attention 2 / SageAttention 2 / SageAttention 3. Those patch attention; this path accelerates **QuantizedTensor INT8 Linear GEMM** only.
 
@@ -1901,14 +1903,14 @@ INT8 Triton Linear acceleration is orthogonal to Flash-Attention 2 / SageAttenti
 1. Install / re-run `install.py` → look for `INT8 Triton speed path: READY`.
 2. Use `HSWQFP8E4M3UNetLoader` or SDXL HSWQ checkpoint loader with INT8 weights.
 3. Leave **Triton accelerate** ON (default).
-4. Sample once; confirm `fused W8A8 Linear path active (Plan B)`.
-5. To A/B test: turn toggle OFF → expect eager/_int_mm only.
+4. Sample once; confirm the literal log `fused W8A8 Linear path active (Plan B)`.
+5. Toggle OFF → expect eager/_int_mm only (fused path gated off).
 
 ---
 
 ## 6. References
 
-- Plan document: `md/INT8_TRITON_W8A8_PUBLIC_ACCELERATION_PLAN.md`
+- Design record: `md/INT8_TRITON_W8A8_PUBLIC_ACCELERATION_PLAN.md`
 - Kernel recipe lineage: ComfyUI-INT8-Fast `int8_fused_kernel.py` / forge kitchen INT8 linear family
 - Ship commit: `bf8a8a6`
 
