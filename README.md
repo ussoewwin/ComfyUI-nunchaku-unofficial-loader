@@ -73,6 +73,8 @@ Restart ComfyUI to load the nodes.
 
 ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, with optional device selection and **FP8 / INT8** precision support. Use it like the standard Load Checkpoint node; it outputs MODEL and CLIP only (no VAE). Scope is **general FP8 and INT8** (including HSWQ and native comfy_quant), not limited to HSWQ-only weights.
 
+This loader does **not** ship an in-node Triton accelerate toggle. INT8 Linear speed is left to **ComfyUI + `comfy_kitchen`** (`int8_linear`: cuda → triton → eager). This extension only keeps INT8 **load compatibility** patches (Conv2d / LoRA / ControlLora / handoff).
+
 #### Features
 
 - **Checkpoint Loading**: Loads both UNet (MODEL) and CLIP from a single SDXL checkpoint file (same as standard Load Checkpoint)
@@ -81,12 +83,14 @@ ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, w
 - **INT8 weight dtype**: `int8_tensorwise` — native **comfy_quant** / `int8_tensorwise` via ComfyUI `MixedPrecisionOps` (this extension also patches **Conv2d** quant load so SD UNet INT8 works, not Linear-only)
 - **INT8 auto-detect**: If the safetensors looks like comfy_quant INT8, the loader uses the MixedPrecisionOps path even when `weight_dtype` is not set to `int8_tensorwise` (does not force float8 over int8 weights)
 - **Standard ComfyUI Integration**: Uses `load_checkpoint_guess_config`; compatible with standard ComfyUI workflows
+- **No Triton accelerate widget**: UI is checkpoint / weight dtype / device only; fused INT8 Linear acceleration is not controlled from this node
 
 #### Usage Notes
 
 - **Inputs**: `ckpt_name` (checkpoint file), `weight_dtype` (`default` / FP8 options / `int8_tensorwise`), and optionally `device`
 - **Outputs**: MODEL and CLIP only; use a separate VAE loader if needed
 - **Category**: Loaders (`loaders`)
+- **INT8 speed**: Rely on ComfyUI / `comfy_kitchen` for Linear acceleration; this node does not install or toggle Triton
 - **INT8 + LoRA**: For INT8 LoRA bake / Status logging details, see `md/HSWQ_INT8_AND_LORA_TECHNICAL_GUIDE.md`
 
 ### HSWQ&Nunchaku Ultimate SD Upscale
@@ -147,6 +151,8 @@ ComfyUI output node that saves images to your ComfyUI **output** folder as **PNG
 <img src="png/hswqunet.png" alt="HSWQ FP8 E4M3/INT8 UNet Loader" width="400">
 
 Standard ComfyUI UNet loader wrapper that loads FP8 and INT8 diffusion models (**general FP8 and INT8**, not limited to HSWQ-only weights). Loads the UNet (MODEL) from FP8 / INT8 checkpoints like the standard UNet loader (HSWQ FP8 E4M3, Scaled FP8, and native comfy_quant / `int8_tensorwise` when selected or auto-detected).
+
+This loader does **not** ship an in-node Triton accelerate toggle. INT8 Linear speed is left to **ComfyUI + `comfy_kitchen`** (`int8_linear`: cuda → triton → eager). UI inputs are UNet name / weight dtype only; this extension keeps INT8 **load compatibility** patches (Conv2d / LoRA / ControlLora / handoff), not a separate Triton accelerate widget.
 
 ### HSWQ Batched Detailer (SEGS)
 
