@@ -1,11 +1,16 @@
 # INT8 Triton W8A8 Acceleration — Complete Technical Guide
 
+> **Status (v3.2.7+):** This extension **no longer ships** its own INT8 Triton W8A8 Linear path.
+> Acceleration is delegated to **ComfyUI + `comfy_kitchen`** (`int8_linear`: cuda → triton → eager).
+> The sections below are a historical record of the removed Plan B implementation (v3.2.6).
+
 Date: 2026-07-18  
 Repository: `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
-Canonical commit: `bf8a8a6` (`feat: add INT8 W8A8 Triton accelerate with tiled rowwise quant`)  
+Canonical commit (added): `bf8a8a6` (`feat: add INT8 W8A8 Triton accelerate with tiled rowwise quant`)  
+Removed in: **v3.2.7**  
 Related plan: `md/INT8_TRITON_W8A8_PUBLIC_ACCELERATION_PLAN.md`
 
-This guide records the **shipped** INT8 Linear (W8A8) Triton acceleration in this custom node: confirmed behavior, every touched path, full source of new modules / exact modified regions, and the meaning of each piece.
+This guide originally recorded the **shipped** INT8 Linear (W8A8) Triton acceleration in this custom node. That path has been removed; keep this file only as implementation history.
 
 ---
 

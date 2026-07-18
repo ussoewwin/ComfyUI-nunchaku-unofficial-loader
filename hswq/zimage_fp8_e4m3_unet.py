@@ -954,11 +954,6 @@ class HSWQFP8E4M3UNetLoader:
     def INPUT_TYPES(s):
         return {"required": { "unet_name": (folder_paths.get_filename_list("diffusion_models"), ),
                               "weight_dtype": (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2", "int8_tensorwise"],),
-                              "triton_accelerate": ("BOOLEAN", {
-                                  "default": True,
-                                  "label": "Triton accelerate",
-                                  "tooltip": "When ON and weight_dtype is int8_tensorwise (or an INT8 checkpoint is auto-detected), use Triton fused INT8 Linear if Triton is installed. OFF forces eager/_int_mm.",
-                              }),
                              }}
     RETURN_TYPES = ("MODEL",)
     FUNCTION = "load_unet"
@@ -966,7 +961,7 @@ class HSWQFP8E4M3UNetLoader:
     CATEGORY = "advanced/loaders"
     TITLE = "HSWQ FP8 E4M3/INT8 UNet Loader"
 
-    def load_unet(self, unet_name, weight_dtype, triton_accelerate=True):
+    def load_unet(self, unet_name, weight_dtype):
         model_options = {}
         if weight_dtype == "fp8_e4m3fn":
             model_options["dtype"] = torch.float8_e4m3fn

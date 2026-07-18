@@ -2,7 +2,7 @@ import logging
 import os
 from pathlib import Path
 
-__version__ = "3.2.6"
+__version__ = "3.2.7"
 
 import torch
 import yaml
@@ -572,11 +572,6 @@ try:
                 req = {
                     "ckpt_name": (folder_paths.get_filename_list("checkpoints"), {"tooltip": "SDXL checkpoint to load MODEL and CLIP from (same as standard Load Checkpoint)."}),
                     "weight_dtype": (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2", "int8_tensorwise"],),
-                    "triton_accelerate": ("BOOLEAN", {
-                        "default": True,
-                        "label": "Triton accelerate",
-                        "tooltip": "When ON and weight_dtype is int8_tensorwise (or an INT8 checkpoint is auto-detected), use Triton fused INT8 Linear if Triton is installed. OFF forces eager/_int_mm.",
-                    }),
                 }
                 opt = {"device": (devices, {"default": default_dev})}
                 return {"required": req, "optional": opt}
@@ -587,7 +582,7 @@ try:
             CATEGORY = "loaders"
             TITLE = "HSWQ Checkpoint Loader (SDXL)"
 
-            def load_checkpoint(self, ckpt_name, weight_dtype, triton_accelerate=True, device=None):
+            def load_checkpoint(self, ckpt_name, weight_dtype, device=None):
                 original_device = get_current_device()
                 if device is not None:
                     set_current_device(device)

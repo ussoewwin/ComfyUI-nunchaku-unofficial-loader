@@ -1,12 +1,16 @@
 # INT8 Triton W8A8 Public Acceleration — Implementation Plan
 
-This document is the implementation plan for delivering **INT8 Linear (W8A8) Triton speed** through this custom node for **public / worldwide** ComfyUI users.
+> **Status (v3.2.7+):** Plan B was **shipped in v3.2.6 and removed in v3.2.7**.
+> Product decision: rely on **ComfyUI + `comfy_kitchen`** for INT8 Linear acceleration; keep this extension light (compatibility patches only).
+> This document remains as the historical plan for the removed path.
+
+This document was the implementation plan for delivering **INT8 Linear (W8A8) Triton speed** through this custom node for **public / worldwide** ComfyUI users.
 
 Date: 2026-07-18  
 Repository: `ComfyUI-nunchaku-unofficial-loader`
 
-Primary strategy: **Plan B** (ship Triton INT8 GEMM kernels inside this extension and call them from the `QuantizedTensor` / `int8_tensorwise` Linear path).  
-Rejected as the speed guarantee: **Plan A alone** (relying on ComfyUI `comfy_kitchen` Triton + `--enable-triton-backend`).
+Primary strategy at the time: **Plan B** (ship Triton INT8 GEMM kernels inside this extension).  
+**Superseded:** Plan A (ComfyUI `comfy_kitchen` backends) is now the product path.
 
 ---
 

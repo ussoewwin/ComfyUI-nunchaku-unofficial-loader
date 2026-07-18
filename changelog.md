@@ -1,5 +1,10 @@
 # Changelog
 
+## Version 3.2.7
+
+- **Removed**: In-node INT8 W8A8 Triton Linear acceleration (Plan B) — fused kernels, `install.py` Triton stage, and the **Triton accelerate** UI toggle. INT8 Linear speed now relies on ComfyUI + `comfy_kitchen` (`int8_linear` cuda → triton → eager). This extension keeps INT8 load compatibility patches only (Conv2d / LoRA / ControlLora / handoff).
+- See [Release Notes v3.2.7](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.7) for details.
+
 ## Version 3.2.6
 
 - **Added**: Public INT8 W8A8 Triton Linear acceleration (Plan B) for HSWQ INT8 loaders — fused row-wise activation quant → INT8 GEMM → dequant without relying on Comfy `--enable-triton-backend`; Windows/Linux Triton install in `install.py`; UI toggle **Triton accelerate**; tiled rowwise quant so wide layers (e.g. K=10240) stay on the fused path.
