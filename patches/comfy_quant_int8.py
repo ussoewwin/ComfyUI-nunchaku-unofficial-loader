@@ -25,6 +25,12 @@ import threading
 logger = logging.getLogger(__name__)
 _PATCHES_APPLIED = False
 
+# Plan B: Triton INT8 Linear accelerate (default ON until a loader stamps OFF)
+_HSWQ_TRITON_ACCELERATE_DEFAULT = True
+_TRITON_LINEAR_FAIL_LOGGED = False
+_TRITON_LINEAR_OK_LOGGED = False
+_INT8_TRITON_TINY_M = 16
+
 # LoRA bake path logs (rate-limited so console stays readable)
 _LORA_CONVERT_LOG_MAX = 0  # quiet; Status dump is enough
 _LORA_SET_LOG_MAX = 0
@@ -70,6 +76,158 @@ def _console(msg: str) -> None:
     """Always visible in ComfyUI console (print + INFO)."""
     print(msg, flush=True)
     logger.info(msg)
+
+
+def _iter_stamp_modules(model):
+    """Yield unique nn.Modules under ModelPatcher / diffusion_model."""
+    seen = set()
+    roots = [model]
+    inner = getattr(model, "model", None)
+    if inner is not None:
+        roots.append(inner)
+        dm = getattr(inner, "diffusion_model", None)
+        if dm is not None:
+            roots.append(dm)
+    for root in roots:
+        modules_fn = getattr(root, "modules", None)
+        if not callable(modules_fn):
+            continue
+        for mod in modules_fn():
+            mid = id(mod)
+            if mid in seen:
+                continue
+            seen.add(mid)
+            yield mod
+
+
+def _extract_int8_plain_tensors(weight):
+    """Return (weight_q int8, weight_scale) or None."""
+    try:
+        from comfy_kitchen.tensor.int8 import TensorWiseINT8Layout
+
+        if getattr(weight, "_layout_cls", None) == "TensorWiseINT8Layout":
+            return TensorWiseINT8Layout.get_plain_tensors(weight)
+    except Exception:
+        pass
+    qdata = getattr(weight, "_qdata", None)
+    params = getattr(weight, "_params", None)
+    if qdata is None or params is None:
+        return None
+    scale = getattr(params, "scale", None)
+    if scale is None:
+        return None
+    return qdata, scale
+
+
+def _try_triton_int8_linear(module, input_tensor, weight, bias):
+    """Plan B fused Triton path. Returns output tensor or None to fall through."""
+    global _TRITON_LINEAR_FAIL_LOGGED, _TRITON_LINEAR_OK_LOGGED
+
+    if getattr(module, "quant_format", None) != "int8_tensorwise":
+        return None
+    accelerate = getattr(module, "_hswq_triton_accelerate", _HSWQ_TRITON_ACCELERATE_DEFAULT)
+    if not accelerate:
+        return None
+
+    import torch
+    try:
+        from comfy.quant_ops import QuantizedTensor
+    except ImportError:
+        return None
+    if not isinstance(weight, QuantizedTensor):
+        return None
+    layout_cls = getattr(weight, "_layout_cls", None)
+    if layout_cls not in (None, "TensorWiseINT8Layout"):
+        if getattr(module, "layout_type", None) != "TensorWiseINT8Layout":
+            return None
+    elif layout_cls is None and getattr(module, "layout_type", None) not in (
+        None,
+        "TensorWiseINT8Layout",
+    ):
+        return None
+
+    params = getattr(weight, "_params", None)
+    if params is not None:
+        if getattr(params, "convrot", False):
+            return None
+        if getattr(params, "transposed", False):
+            return None
+
+    try:
+        from .int8_triton_kernels import (
+            cuda_sm_ok_for_triton_int8,
+            fused_int8_linear,
+            is_triton_int8_available,
+        )
+    except ImportError:
+        return None
+    if not is_triton_int8_available():
+        return None
+
+    x = input_tensor
+    if isinstance(x, QuantizedTensor):
+        x = x.dequantize()
+    if not isinstance(x, torch.Tensor) or not x.is_cuda:
+        return None
+
+    # Plan success criterion: SM >= 8.0. Optional SM 7.5 via env.
+    if not cuda_sm_ok_for_triton_int8((8, 0)):
+        allow_sm75 = os.environ.get("HSWQ_TRITON_INT8_ALLOW_SM75", "0") == "1"
+        if not (allow_sm75 and cuda_sm_ok_for_triton_int8((7, 5))):
+            return None
+
+    plain = _extract_int8_plain_tensors(weight)
+    if plain is None:
+        return None
+    weight_q, weight_scale = plain
+
+    x_2d_rows = x.reshape(-1, x.shape[-1]).shape[0]
+    if x_2d_rows <= _INT8_TRITON_TINY_M:
+        w_f = weight.dequantize().to(dtype=x.dtype)
+        return torch.nn.functional.linear(x, w_f, bias)
+
+    try:
+        out = fused_int8_linear(
+            x.contiguous(),
+            weight_q.contiguous(),
+            weight_scale,
+            bias,
+            compute_dtype=x.dtype,
+        )
+    except Exception as exc:
+        if not _TRITON_LINEAR_FAIL_LOGGED:
+            _TRITON_LINEAR_FAIL_LOGGED = True
+            logger.warning(
+                "[HSWQ INT8 Triton] fused Linear failed once — using F.linear fallback: %s",
+                exc,
+            )
+        return None
+
+    if not _TRITON_LINEAR_OK_LOGGED:
+        _TRITON_LINEAR_OK_LOGGED = True
+        _console("[HSWQ INT8 Triton] fused W8A8 Linear path active (Plan B)")
+    return out
+
+
+def _patch_linear_triton_forward(linear_cls) -> bool:
+    """Wrap MixedPrecisionOps.Linear._forward for Plan B Triton INT8."""
+    if linear_cls is None:
+        return False
+    if getattr(linear_cls, "_hswq_triton_linear_patched", False):
+        return True
+    orig_forward = getattr(linear_cls, "_forward", None)
+    if orig_forward is None or not callable(orig_forward):
+        return False
+
+    def _forward(self, input, weight, bias):
+        accelerated = _try_triton_int8_linear(self, input, weight, bias)
+        if accelerated is not None:
+            return accelerated
+        return orig_forward(self, input, weight, bias)
+
+    linear_cls._forward = _forward
+    linear_cls._hswq_triton_linear_patched = True
+    return True
 
 
 def record_lora_shape_skip(lora_name: str, key: str, reason: str) -> None:
@@ -870,7 +1028,12 @@ def _patch_ops_decode_and_conv() -> bool:
     original_mp = getattr(ops_module, "mixed_precision_ops", None)
     if original_mp is None or not callable(original_mp):
         return False
-    if getattr(original_mp, "_hswq_int8_conv_patched", False):
+    _OPS_PATCH_VER = 2
+    true_orig = getattr(original_mp, "_hswq_orig_mixed_precision_ops", original_mp)
+    if (
+        getattr(original_mp, "_hswq_int8_ops_ver", 0) >= _OPS_PATCH_VER
+        and getattr(original_mp, "_hswq_int8_conv_patched", False)
+    ):
         return True
 
     def mixed_precision_ops_force_conv(
@@ -884,7 +1047,7 @@ def _patch_ops_decode_and_conv() -> bool:
             compute_dtype = torch.bfloat16
         if disabled is None:
             disabled = []
-        result = original_mp(
+        result = true_orig(
             quant_config=quant_config,
             compute_dtype=compute_dtype,
             full_precision_mm=full_precision_mm,
@@ -895,9 +1058,13 @@ def _patch_ops_decode_and_conv() -> bool:
         # Conv2d — detect_layer_quantization() is {"mixed_ops": True} for both.
         if _should_inject_int8_conv(quant_config):
             result.Conv2d = _make_quantized_conv2d(ops_module, result, disabled)
+        # Plan B: fuse Triton INT8 Linear on this MixedPrecisionOps.Linear class.
+        _patch_linear_triton_forward(getattr(result, "Linear", None))
         return result
 
+    mixed_precision_ops_force_conv._hswq_orig_mixed_precision_ops = true_orig
     mixed_precision_ops_force_conv._hswq_int8_conv_patched = True
+    mixed_precision_ops_force_conv._hswq_int8_ops_ver = _OPS_PATCH_VER
     ops_module.mixed_precision_ops = mixed_precision_ops_force_conv
     return True
 
@@ -1941,7 +2108,38 @@ def apply_comfy_quant_int8_patches() -> bool:
     return False
 
 
-def load_unet_hswq_weight_dtype(unet_name, weight_dtype):
+def _stamp_triton_accelerate(model, triton_accelerate):
+    """Persist the Triton accelerate toggle on MODEL + INT8 Linear modules."""
+    global _HSWQ_TRITON_ACCELERATE_DEFAULT
+    enabled = bool(triton_accelerate)
+    _HSWQ_TRITON_ACCELERATE_DEFAULT = enabled
+    if model is None:
+        return
+    opts = getattr(model, "model_options", None)
+    if not isinstance(opts, dict):
+        opts = {}
+        try:
+            model.model_options = opts
+        except Exception:
+            pass
+    if isinstance(opts, dict):
+        opts["hswq_triton_accelerate"] = enabled
+    stamped = 0
+    for mod in _iter_stamp_modules(model):
+        if getattr(mod, "quant_format", None) == "int8_tensorwise":
+            try:
+                mod._hswq_triton_accelerate = enabled
+                stamped += 1
+            except Exception:
+                pass
+    logging.info(
+        "[HSWQ INT8] Triton accelerate toggle: %s (stamped %d int8_tensorwise modules)",
+        "ON" if enabled else "OFF",
+        stamped,
+    )
+
+
+def load_unet_hswq_weight_dtype(unet_name, weight_dtype, triton_accelerate=True):
     import logging
     import torch
     import folder_paths
@@ -1954,12 +2152,13 @@ def load_unet_hswq_weight_dtype(unet_name, weight_dtype):
 
     if is_int8:
         apply_comfy_quant_int8_patches()
-        model_options = {}
+        model_options = {"hswq_triton_accelerate": bool(triton_accelerate)}
         reset_int8_lora_log_counters()
         logging.info("[HSWQ INT8] Loading UNet via MixedPrecisionOps (int8_tensorwise / comfy_quant)")
         print(f"[HSWQ INT8] Loading UNet: {unet_name}", flush=True)
         with _int8_quant_conv_scope():
             model = comfy.sd.load_diffusion_model(unet_path, model_options=model_options)
+        _stamp_triton_accelerate(model, triton_accelerate)
         summarize_int8_lora_capability(model)
     else:
         model_options = {}
@@ -1975,7 +2174,7 @@ def load_unet_hswq_weight_dtype(unet_name, weight_dtype):
     return (model,)
 
 
-def load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device=None):
+def load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device=None, triton_accelerate=True):
     import sys
     import torch
     import folder_paths
@@ -1999,6 +2198,7 @@ def load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device=None)
         if is_int8:
             apply_comfy_quant_int8_patches()
             reset_int8_lora_log_counters()
+            model_options["hswq_triton_accelerate"] = bool(triton_accelerate)
             sdxl_logger.info(
                 "[SDXL INT8] Loading checkpoint via MixedPrecisionOps "
                 "(int8_tensorwise / comfy_quant): %s",
@@ -2013,6 +2213,7 @@ def load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device=None)
                     model_options=model_options,
                 )
             model, clip, _v = out[:3]
+            _stamp_triton_accelerate(model, triton_accelerate)
             summarize_int8_lora_capability(model)
             return (model, clip)
 
@@ -2051,19 +2252,19 @@ def install_int8_option_dispatch(node_class_mappings) -> bool:
     if unet_cls is not None:
         _orig_load_unet = unet_cls.load_unet
 
-        def load_unet(self, unet_name, weight_dtype):
+        def load_unet(self, unet_name, weight_dtype, triton_accelerate=True):
             # Explicit FP8 choices stay on the original FP loader body — never INT8 helper.
             if weight_dtype in _FP8_WEIGHT_DTYPES:
-                return _orig_load_unet(self, unet_name, weight_dtype)
+                return _orig_load_unet(self, unet_name, weight_dtype, triton_accelerate=triton_accelerate)
             if weight_dtype == "int8_tensorwise":
-                return load_unet_hswq_weight_dtype(unet_name, weight_dtype)
+                return load_unet_hswq_weight_dtype(unet_name, weight_dtype, triton_accelerate=triton_accelerate)
             # default: auto-detect INT8 checkpoints only; otherwise original FP path.
             import folder_paths
 
             unet_path = folder_paths.get_full_path_or_raise("diffusion_models", unet_name)
             if checkpoint_looks_like_comfy_quant_int8(unet_path):
-                return load_unet_hswq_weight_dtype(unet_name, weight_dtype)
-            return _orig_load_unet(self, unet_name, weight_dtype)
+                return load_unet_hswq_weight_dtype(unet_name, weight_dtype, triton_accelerate=triton_accelerate)
+            return _orig_load_unet(self, unet_name, weight_dtype, triton_accelerate=triton_accelerate)
 
         unet_cls.load_unet = load_unet
 
@@ -2071,17 +2272,25 @@ def install_int8_option_dispatch(node_class_mappings) -> bool:
     if sdxl_cls is not None:
         _orig_load_checkpoint = sdxl_cls.load_checkpoint
 
-        def load_checkpoint(self, ckpt_name, weight_dtype, device=None):
+        def load_checkpoint(self, ckpt_name, weight_dtype, triton_accelerate=True, device=None):
             if weight_dtype in _FP8_WEIGHT_DTYPES:
-                return _orig_load_checkpoint(self, ckpt_name, weight_dtype, device)
+                return _orig_load_checkpoint(
+                    self, ckpt_name, weight_dtype, triton_accelerate=triton_accelerate, device=device
+                )
             if weight_dtype == "int8_tensorwise":
-                return load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device)
+                return load_checkpoint_sdxl_hswq_weight_dtype(
+                    ckpt_name, weight_dtype, device=device, triton_accelerate=triton_accelerate
+                )
             import folder_paths
 
             ckpt_path = folder_paths.get_full_path_or_raise("checkpoints", ckpt_name)
             if checkpoint_looks_like_comfy_quant_int8(ckpt_path):
-                return load_checkpoint_sdxl_hswq_weight_dtype(ckpt_name, weight_dtype, device)
-            return _orig_load_checkpoint(self, ckpt_name, weight_dtype, device)
+                return load_checkpoint_sdxl_hswq_weight_dtype(
+                    ckpt_name, weight_dtype, device=device, triton_accelerate=triton_accelerate
+                )
+            return _orig_load_checkpoint(
+                self, ckpt_name, weight_dtype, triton_accelerate=triton_accelerate, device=device
+            )
 
         sdxl_cls.load_checkpoint = load_checkpoint
 
