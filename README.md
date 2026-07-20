@@ -81,9 +81,9 @@ This loader does **not** ship an in-node Triton accelerate toggle. INT8 Linear s
 - **INT8 speed**: Rely on ComfyUI / `comfy_kitchen` for Linear acceleration; this node does not install or toggle Triton
 - **INT8 + LoRA**: For INT8 LoRA bake / Status logging details, see `md/HSWQ_INT8_AND_LORA_TECHNICAL_GUIDE.md`
 
-### HSWQ&Nunchaku Ultimate SD Upscale
+### HSWQ Ultimate SD Upscale
 
-<img src="png/usdu_auto_workflow.png" alt="HSWQ&Nunchaku Ultimate SD Upscale" width="400">
+<img src="png/usdu_auto_workflow.png" alt="HSWQ Ultimate SD Upscale" width="400">
 
 ComfyUI node for upscaling images using tile-based image-to-image processing, specifically optimized for Nunchaku SDXL models.
 

@@ -1,4 +1,4 @@
-# HSWQ&Nunchaku Ultimate SD Upscale: runtime patches for tensor shape and quantization
+# HSWQ Ultimate SD Upscale: runtime patches for tensor shape and quantization
 # Addresses copy_ / FP8 bias / embedder / Lumina modulate and apply_gate errors at node execution
 # via imports and patches in this extension only (other extensions, site-packages, and core are not modified)
 
@@ -171,7 +171,7 @@ def patch_lumina_modulate_scale_guard():
 
 
 def apply_usdu_compat_patches():
-    """Apply all HSWQ&Nunchaku Ultimate SD Upscale compatibility patches."""
+    """Apply all HSWQ Ultimate SD Upscale compatibility patches."""
     patch_comfy_kitchen_copy_guard()
     patch_comfy_kitchen_fp8_linear_bias_guard()
     patch_control_embedder_linear_weight_transpose()

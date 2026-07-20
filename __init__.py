@@ -119,7 +119,7 @@ from .utils import get_package_version, get_plugin_version
 # Dynamic INT8 LoRA bake must detect comfy QuantizedTensor only — never bare
 # torch.int8 (Nunchaku SVDQ false positive → Abort on Z-Image / Lumina2).
 
-# HSWQ&Nunchaku Ultimate SD Upscale: apply copy_ / FP8 bias / embedder / Lumina compat patches in this extension
+# HSWQ Ultimate SD Upscale: apply copy_ / FP8 bias / embedder / Lumina compat patches in this extension
 try:
     from .usdu_compat_patches import apply_usdu_compat_patches
     apply_usdu_compat_patches()
@@ -496,9 +496,9 @@ NODE_CLASS_MAPPINGS = {}
 
 try:
     from .nodes.nunchaku_usdu import (
-        NunchakuUltimateSDUpscale,
+        HSWQUltimateSDUpscale,
     )
-    NODE_CLASS_MAPPINGS["NunchakuUltimateSDUpscale"] = NunchakuUltimateSDUpscale
+    NODE_CLASS_MAPPINGS["HSWQUltimateSDUpscale"] = HSWQUltimateSDUpscale
     logger.info("Nunchaku Ultimate SD Upscale nodes registered successfully")
 except Exception as e:
     logger.error(f"Failed to register Nunchaku Ultimate SD Upscale nodes: {e}", exc_info=True)

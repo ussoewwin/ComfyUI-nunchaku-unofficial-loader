@@ -167,7 +167,7 @@ def rename_input(inputs: list, old_name: str, new_name: str):
             break
 
 
-class NunchakuUltimateSDUpscale:
+class HSWQUltimateSDUpscale:
     @classmethod
     def INPUT_TYPES(s):
         try:
@@ -175,7 +175,7 @@ class NunchakuUltimateSDUpscale:
             required, optional = USDU_base_inputs()
             return prepare_inputs(required, optional)
         except Exception as e:
-            logger.error(f"Failed to initialize NunchakuUltimateSDUpscale INPUT_TYPES: {e}", exc_info=True)
+            logger.error(f"Failed to initialize HSWQUltimateSDUpscale INPUT_TYPES: {e}", exc_info=True)
             # Provide fallback with default modes to allow node registration even if imports fail
             # Fallback INPUT_TYPES when usdu_bundle import fails
             fallback_modes = ["Linear", "Chess", "None"] if not MODES else list(MODES.keys())
@@ -219,7 +219,7 @@ class NunchakuUltimateSDUpscale:
     CATEGORY = "image/upscaling"
     OUTPUT_TOOLTIPS = ("The final upscaled image.",)
     DESCRIPTION = "Upscales an image and runs image-to-image on tiles from the input image."
-    TITLE = "HSWQ&Nunchaku Ultimate SD Upscale"
+    TITLE = "HSWQ Ultimate SD Upscale"
 
     def upscale(
         self,
