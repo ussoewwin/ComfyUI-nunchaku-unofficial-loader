@@ -5,48 +5,12 @@ from pathlib import Path
 __version__ = "3.2.7"
 
 import torch
-import yaml
 from packaging.version import InvalidVersion, Version
 
 # SDXL MultiGPU support (from comfyui-multigpu)
 import comfy.model_management as mm
 
-# vanilla and LTS compatibility snippet
-try:
-    from comfy_compatibility.vanilla import prepare_vanilla_environment
-
-    prepare_vanilla_environment()
-
-    from comfy.model_downloader import add_known_models
-    from comfy.model_downloader_types import HuggingFile
-
-    capability = torch.cuda.get_device_capability(0 if torch.cuda.is_available() else None)
-    sm = f"{capability[0]}{capability[1]}"
-    precision = "fp4" if sm == "120" else "int4"
-
-    # add known models
-
-    models_yaml_path = Path(__file__).parent / "test_data" / "models.yaml"
-    with open(models_yaml_path, "r") as f:
-        nunchaku_models_yaml = yaml.safe_load(f)
-
-    NUNCHAKU_SVDQ_MODELS = []
-    for model in nunchaku_models_yaml["models"]:
-        filename = model["filename"]
-        if not filename.startswith("svdq-"):
-            continue
-        if "{precision}" in filename:
-            filename = filename.format(precision=precision)
-        NUNCHAKU_SVDQ_MODELS.append(HuggingFile(repo_id=model["repo_id"], filename=filename))
-
-    NUNCHAKU_SVDQ_TEXT_ENCODER_MODELS = [
-        HuggingFile(repo_id="nunchaku-tech/nunchaku-t5", filename="awq-int4-flux.1-t5xxl.safetensors"),
-    ]
-
-    add_known_models("diffusion_models", *NUNCHAKU_SVDQ_MODELS)
-    add_known_models("text_encoders", *NUNCHAKU_SVDQ_TEXT_ENCODER_MODELS)
-except (ImportError, ModuleNotFoundError):
-    pass
+# Nunchaku SVDQ model download snippet removed (Nunchaku SDXL / Z-Image Turbo support dropped).
 
 # Get log level from environment variable (default to INFO)
 log_level = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -619,86 +583,7 @@ try:
         NODE_CLASS_MAPPINGS["NunchakuUssoewwinCheckpointLoaderSDXL"] = NunchakuUssoewwinCheckpointLoaderSDXL
         sdxl_logger.info("[SDXL] Registered NunchakuUssoewwinCheckpointLoaderSDXL node (MODEL + CLIP)")
 
-        class UssoewwinCheckpointLoaderZImageTurbo(_UNETLoaderBase):
-            """Checkpoint Loader (Z Image Turbo) with device selection. Ref: CheckpointLoaderSimple."""
-
-            @classmethod
-            def INPUT_TYPES(cls):
-                base = _UNETLoaderBase.INPUT_TYPES()
-                base_req = dict(base.get("required", {}))
-                base_opt = dict(base.get("optional", {}))
-                devices = get_device_list()
-                default_dev = devices[1] if len(devices) > 1 else devices[0]
-                req = {
-                    "ckpt_name": (folder_paths.get_filename_list("checkpoints"), {"tooltip": "Z Image Turbo checkpoint to load MODEL and CLIP from (same as standard Load Checkpoint)."}),
-                    "weight_dtype": (["default", "fp8_e4m3fn", "fp8_e5m2"],),
-                }
-                opt = {"device": (devices, {"default": default_dev})}
-                return {"required": req, "optional": opt}
-
-            RETURN_TYPES = ("MODEL",)
-            OUTPUT_TOOLTIPS = ("The transformer diffusion model from checkpoint.",)
-            FUNCTION = "load_checkpoint"
-            CATEGORY = "loaders"
-            TITLE = "Checkpoint Loader (Z Image Turbo)"
-
-            def load_checkpoint(self, ckpt_name, weight_dtype, device=None):
-                original_device = get_current_device()
-                if device is not None:
-                    set_current_device(device)
-                try:
-                    import comfy.ops
-                    ckpt_path = folder_paths.get_full_path_or_raise("checkpoints", ckpt_name)
-                    model_options = {}
-                    is_fp8 = False
-                    if weight_dtype == "fp8_e4m3fn":
-                        model_options["dtype"] = torch.float8_e4m3fn
-                        model_options["custom_operations"] = comfy.ops.fp8_ops
-                        is_fp8 = True
-                    elif weight_dtype == "fp8_e5m2":
-                        model_options["dtype"] = torch.float8_e5m2
-                        model_options["custom_operations"] = comfy.ops.fp8_ops
-                        is_fp8 = True
-
-                    out = comfy.sd.load_checkpoint_guess_config(
-                        ckpt_path,
-                        output_vae=False,
-                        output_clip=False,
-                        model_options=model_options,
-                    )
-                    model = out[0]
-                    
-                    # Debug: check parameter dtypes and layer types
-                    if hasattr(model, 'model') and hasattr(model.model, 'diffusion_model'):
-                        dm = model.model.diffusion_model
-                        total_params = 0
-                        fp8_params = 0
-                        bf16_params = 0
-                        for name, param in dm.named_parameters():
-                            total_params += param.numel()
-                            if param.dtype == torch.float8_e4m3fn or param.dtype == torch.float8_e5m2:
-                                fp8_params += param.numel()
-                            elif param.dtype == torch.bfloat16 or param.dtype == torch.float16:
-                                bf16_params += param.numel()
-                        sdxl_logger.info(f"[ZIT DEBUG] Total params: {total_params:,}, FP8: {fp8_params:,}, BF16/FP16: {bf16_params:,}")
-                        # Check layer type
-                        for name, module in dm.named_modules():
-                            if hasattr(module, 'weight') and module.weight is not None:
-                                is_fp8_forced = isinstance(module, comfy.ops.fp8_ops.Linear) if hasattr(comfy.ops, 'fp8_ops') else False
-                                sdxl_logger.info(f"[ZIT DEBUG] Layer {name}: {type(module)}, is_fp8_ops_forced={is_fp8_forced}")
-                                break
-                    
-                    # For FP8: force manual_cast_dtype to bfloat16 (ComfyUI default would cast FP8 to float32 otherwise)
-                    if is_fp8 and hasattr(model, 'model') and hasattr(model.model, 'manual_cast_dtype'):
-                        model.model.manual_cast_dtype = torch.bfloat16
-                        sdxl_logger.info(f"[ZIT FP8] Forced manual_cast_dtype to bfloat16 for FP8 VRAM optimization")
-                    
-                    return (model,)
-                finally:
-                    set_current_device(original_device)
-
-        NODE_CLASS_MAPPINGS["ZITCheckpointLoader"] = UssoewwinCheckpointLoaderZImageTurbo
-        sdxl_logger.info(f"[Z Image Turbo] Registered ZITCheckpointLoader node, RETURN_TYPES={UssoewwinCheckpointLoaderZImageTurbo.RETURN_TYPES}")
+        # Z Image Turbo checkpoint loader removed (Nunchaku Z Image Turbo support dropped).
 except Exception as e:
     sdxl_logger.exception(f"[SDXL] Failed to register NunchakuUssoewwinCheckpointLoaderSDXL: {e}")
 
