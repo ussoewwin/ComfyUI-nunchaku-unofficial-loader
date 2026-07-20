@@ -12,7 +12,7 @@ requant, same idea as BobJohnson24/ComfyUI-INT8-Fast). Injected Conv2d must
 mirror that set_weight; without it ModelPatcher falls back to rounding into
 int8 and LoRA deltas on Conv layers vanish.
 
-Applied from ComfyUI-nunchaku-unofficial-loader so ComfyUI core updates do not wipe it.
+Applied from ComfyUI-HSWQ-Loader-and-Tools so ComfyUI core updates do not wipe it.
 """
 from __future__ import annotations
 

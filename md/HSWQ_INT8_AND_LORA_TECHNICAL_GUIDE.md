@@ -1,7 +1,7 @@
 # HSWQ INT8 (comfy_quant) and LoRA Support — Technical Implementation Manual
 
 Date: 2026-07-12  
-Repository: `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
+Repository: `ussoewwin/ComfyUI-HSWQ-Loader-and-Tools`  
 Feature commit: `516ac28` — `feat: native comfy_quant INT8 load, LoRA bake Status, fix Dynamic VBAR OOM`  
 Package version at time of record: `3.1.8` (no version bump / tag / GitHub Release for this change)
 
@@ -20,7 +20,7 @@ Style matches other public manuals under `md/` (for example `HSWQ_SAVE_IMAGE_AND
 
 ### 1.1 Goals
 
-Implement the following **without editing ComfyUI core**, using monkey-patches inside `ComfyUI-nunchaku-unofficial-loader` only:
+Implement the following **without editing ComfyUI core**, using monkey-patches inside `ComfyUI-HSWQ-Loader-and-Tools` only:
 
 | Pillar | Description |
 |--------|-------------|
@@ -127,7 +127,7 @@ requant, same idea as BobJohnson24/ComfyUI-INT8-Fast). Injected Conv2d must
 mirror that set_weight; without it ModelPatcher falls back to rounding into
 int8 and LoRA deltas on Conv layers vanish.
 
-Applied from ComfyUI-nunchaku-unofficial-loader so ComfyUI core updates do not wipe it.
+Applied from ComfyUI-HSWQ-Loader-and-Tools so ComfyUI core updates do not wipe it.
 """
 from __future__ import annotations
 
@@ -5340,7 +5340,7 @@ UNETLoader = HSWQFP8E4M3UNetLoader
 
 ```python
 """
-Patch inside ComfyUI-nunchaku-unofficial-loader to prevent mat1/mat2 shape
+Patch inside ComfyUI-HSWQ-Loader-and-Tools to prevent mat1/mat2 shape
 mismatches when running Z-Image + FP8 E4M3 + torch.compile.
 
 - LoRA: skip applying a layer when reshape or LoRA output numel does not match weight.

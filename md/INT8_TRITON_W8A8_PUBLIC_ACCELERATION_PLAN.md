@@ -7,7 +7,7 @@
 This document was the implementation plan for delivering **INT8 Linear (W8A8) Triton speed** through this custom node for **public / worldwide** ComfyUI users.
 
 Date: 2026-07-18  
-Repository: `ComfyUI-nunchaku-unofficial-loader`
+Repository: `ComfyUI-HSWQ-Loader-and-Tools`
 
 Primary strategy at the time: **Plan B** (ship Triton INT8 GEMM kernels inside this extension).  
 **Superseded:** Plan A (ComfyUI `comfy_kitchen` backends) is now the product path.

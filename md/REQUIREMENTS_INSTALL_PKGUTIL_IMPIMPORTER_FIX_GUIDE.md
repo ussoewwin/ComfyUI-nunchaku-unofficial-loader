@@ -15,7 +15,7 @@ source distribution.
 ## 1. Error content (from the issue)
 
 Reported in issue #3 — **"Installing requirements.txt failed"**:
-<https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/issues/3>
+<https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/issues/3>
 
 The user ran, from the custom node directory of a portable install:
 

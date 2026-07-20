@@ -3,7 +3,7 @@
 This document describes the **HSWQ Save Image** output node and the **Auto `upscale_by` / `target_height`** enhancement to **HSWQ&Nunchaku Ultimate SD Upscale** (`NunchakuUltimateSDUpscale`).
 
 Date: 2026-06-24  
-Repository: `ComfyUI-nunchaku-unofficial-loader`
+Repository: `ComfyUI-HSWQ-Loader-and-Tools`
 
 ---
 

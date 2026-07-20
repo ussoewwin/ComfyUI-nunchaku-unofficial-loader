@@ -3,66 +3,66 @@
 ## Version 3.2.7
 
 - **Removed**: In-node INT8 W8A8 Triton Linear acceleration (Plan B) — fused kernels, `install.py` Triton stage, and the **Triton accelerate** UI toggle. INT8 Linear speed now relies on ComfyUI + `comfy_kitchen` (`int8_linear` cuda → triton → eager). This extension keeps INT8 load compatibility patches only (Conv2d / LoRA / ControlLora / handoff).
-- See [Release Notes v3.2.7](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.7) for details.
+- See [Release Notes v3.2.7](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.2.7) for details.
 
 ## Version 3.2.6
 
 - **Added**: Public INT8 W8A8 Triton Linear acceleration (Plan B) for HSWQ INT8 loaders — fused row-wise activation quant → INT8 GEMM → dequant without relying on Comfy `--enable-triton-backend`; Windows/Linux Triton install in `install.py`; UI toggle **Triton accelerate**; tiled rowwise quant so wide layers (e.g. K=10240) stay on the fused path.
-- See [Release Notes v3.2.6](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.6) for details.
+- See [Release Notes v3.2.6](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.2.6) for details.
 
 ## Version 3.2.5
 
 - **Fixed**: `requirements.txt` install failure on outdated portable/embedded Python environments — a transitive, wheel-less source dependency (`filterpy`, pulled by `facexlib`) forced a source build that crashed with `AttributeError: module 'pkgutil' has no attribute 'ImpImporter'` on Python 3.12+ because the environment shipped an old `setuptools`. An `install.py` now upgrades `pip` / `setuptools` / `wheel` before installing `requirements.txt`, so ComfyUI-Manager install/update repairs the build tooling first and the legacy source build succeeds.
-- See [Release Notes v3.2.5](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.5) for details.
+- See [Release Notes v3.2.5](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.2.5) for details.
 
 ## Version 3.2.4
 
 - **Fixed**: SDXL LoRA-type ControlNet (e.g. `anytest`) producing all-black output under INT8 quantization — `ControlLora.pre_run` borrowed the INT8 base UNet weights via `diffusion_model.state_dict()`, which returned flattened raw `int8`/`uint8` tensors instead of `QuantizedTensor`, so the borrowed weights were never dequantized. The patch intercepts that `state_dict()` and dequantizes the INT8 base weights on the fly (full-weight ControlNets such as `canny` were unaffected, and the issue did not occur in FP8).
-- See [Release Notes v3.2.4](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.4) for details.
+- See [Release Notes v3.2.4](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.2.4) for details.
 
 ## Version 3.2.3
 
 - **Added**: **HSWQ Sampler** — a KSampler-equivalent node that behaves exactly like the standard ComfyUI KSampler, but automatically adds all of RES4LYF's samplers and schedulers when [RES4LYF](https://github.com/ClownsharkBatwing/RES4LYF) is installed. It reproduces Forge's dynamic sampler generation so the full Runge-Kutta (`rk_beta`) sampler family stays selectable and runnable in vanilla ComfyUI.
-- See [Release Notes v3.2.3](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.3) for details.
+- See [Release Notes v3.2.3](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.2.3) for details.
 
 ## Version 3.2.2
 
 - **Fixed**: INT8→Nunchaku VRAM handoff false-positive on non-SVDQ loads (including SDXL INT8 normal generation) — SVDQ detection no longer uses bare `"nunchaku" in __module__` (this extension’s INT8 Conv2d path contains that substring); handoff `_VER = 10` arms only for real Nunchaku SVDQ on the BaseModel, and native comfy_quant INT8 (any architecture) never arms handoff.
-- See [Release Notes v3.2.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.2) for details.
+- See [Release Notes v3.2.2](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.2.2) for details.
 
 ## Version 3.2.1
 
 - **Fixed**: INT8 HSWQ (Dynamic VRAM) → Nunchaku SVDQ coexistence Abort — LowVramPatch and Dynamic LoRA bake restricted to `comfy.quant_ops.QuantizedTensor` only (never bare `torch.int8`); unidirectional VRAM handoff uses `detach(unpatch_all=True)` before SVDQ load.
 - **Removed**: Reintroduced **HSWQ Pin Buffer Cache** again (not required for the Abort fix; Detailer-scoped pin pooling remains obsolete after AIMDO HostBuffer).
 - **Docs**: Rewrote `md/HSWQ_INT8_NUNCHAKU_COEXISTENCE_GUIDE.md` for verified Abort causes vs PinCache correlation.
-- See [Release Notes v3.2.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.1) for details.
+- See [Release Notes v3.2.1](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.2.1) for details.
 
 ## Version 3.2.0
 
 - **Removed**: **HSWQ Pin Buffer Cache** (`nodes/hswq_pin_cache.py` and Detailer `hswq_pin_cache_scope`) — redundant after ComfyUI Dynamic VRAM / AIMDO `HostBuffer` updates (no thrashing `unpin` path). Batched Detailer three-phase flow kept; use native ComfyUI pin behavior.
 - **Changed**: Display title forced to **HSWQ Checkpoint Loader (SDXL)** for the SDXL checkpoint loader node.
-- See [Release Notes v3.2.0](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.0) for details.
+- See [Release Notes v3.2.0](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.2.0) for details.
 
 ## Version 3.1.9
 
 - **Added**: Native **comfy_quant INT8** (`int8_tensorwise`) load path for SDXL checkpoints — **HSWQ FP8/INT8 Loader (VRAM Opt)** auto-detects INT8 vs Scaled FP8; **HSWQ FP8 E4M3 UNet Loader** gains `int8_tensorwise` / auto-detect. Extension-side Conv2d quant support and INT8-safe LoRA bake under Dynamic VRAM.
-- See [Release Notes v3.1.9](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.9) for details.
+- See [Release Notes v3.1.9](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.1.9) for details.
 
 ## Version 3.1.8
 
 - **Added**: **HSWQ Save Image** (`NunchakuSaveImage`) — save `IMAGE` output as PNG or JPG (JPEG quality when JPG is selected).
 - **Added**: **Nunchaku Ultimate SD Upscale** — `upscale_by` dropdown with **Auto** mode and `target_height` (default 4320) to derive scale from input height; fixed magnifications 0.05–4.00 remain available.
-- See [Release Notes v3.1.8](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.8) for details.
+- See [Release Notes v3.1.8](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.1.8) for details.
 
 ## Version 3.1.7
 
 - **Fixed**: Critical fix for severe output noise and `RuntimeError` in `NunchakuUltimateSDUpscale` when used with Lumina/HunYuan-DiT architectures. Corrected the conditioning tensor slicing logic to accurately extract T5/LLM features from concatenated tensors.
-- See [Release Notes v3.1.7](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.7) for details.
+- See [Release Notes v3.1.7](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.1.7) for details.
 
 ## Version 3.1.3
 
 - **Fixed**: Workaround for `RuntimeError` in `NunchakuUltimateSDUpscale` caused by a recent ComfyUI core change that concatenates multi-encoder conditioning along the feature dimension (e.g., 7680 instead of 2560) for Lumina/HunYuan-based models. Added automatic detection and truncation of these embeddings before sampling.
-- See [Release Notes v3.1.3](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.3) for details.
+- See [Release Notes v3.1.3](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.1.3) for details.
 
 ## Version 3.1.2
 
@@ -71,19 +71,19 @@
 ## Version 3.1.1
 
 - **Fixed**: Bug fixes and corrections (loader registration, zimage model handling, USDU crop model patch).
-- See [Release Notes v3.1.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.1) for details.
+- See [Release Notes v3.1.1](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.1.1) for details.
 
 ## Version 3.1.0
 
 - **Added** two new nodes:
   - **HSWQ FP8 E4M3 UNet Loader** (`HSWQFP8E4M3UNetLoader`) — Standard UNet loader for HSWQ FP8 E4M3 models; extension also installs a Pin Buffer Cache to reduce `cudaHostRegister`/`cudaHostUnregister` overhead under Dynamic VRAM Loading.
   - **HSWQ Batched Detailer (SEGS)** — Detailer (SEGS)–style node that runs VAE encode → UNet sample → VAE decode in three phases (all encodes, then all samples, then all decodes) to minimize model switching and improve performance with Dynamic VRAM Loading.
-- See [Release Notes v3.1.0](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.0) for details.
+- See [Release Notes v3.1.0](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.1.0) for details.
 
 ## Version 3.0.2
 
 - **README**: FP8 (fp8e4m3) and torch.compile subsection updated — purpose (use this node with FP8 and torch.compile together) and patches description.
-- See [Release Notes v3.0.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/3.0.2) for details.
+- See [Release Notes v3.0.2](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/3.0.2) for details.
 
 ## Version 3.0.0
 
@@ -106,25 +106,25 @@
 - Added **Checkpoint Loader (SDXL)** node
   - Loads MODEL and CLIP from standard SDXL checkpoints with optional device selection and FP8 precision support
 - Nunchaku SDXL SVDQ (4-bit) development discontinued; repository status updated (see IMPORTANT NOTICE at top)
-- See [Release Notes v2.6.3](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.6.3) for details
+- See [Release Notes v2.6.3](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/2.6.3) for details
 
 ## Version 2.6.2
 
 - Fixed NunchakuUltimateSDUpscale node registration issue with Nunchaku 1.2.0
   - Improved error handling in INPUT_TYPES to prevent node registration failures
   - Node is standalone: uses bundled `usdu_bundle` and does not require ComfyUI_UltimateSDUpscale to be installed
-  - See [Issue #2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/issues/2) for details
-- See [Release Notes v2.6.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.6.2) for details
+  - See [Issue #2](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/issues/2) for details
+- See [Release Notes v2.6.2](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/2.6.2) for details
 
 ## Version 2.6.1
 
 - Optimized LoRA processing performance for SDXL models
-- See [Release Notes v2.6.1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.6.1) for details
+- See [Release Notes v2.6.1](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/2.6.1) for details
 
 ## Version 2.6
 
 - Fixed ControlNet support for SDXL models (OpenPose, Depth, Canny, etc.)
-- See [Release Notes v2.6](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.6) for details
+- See [Release Notes v2.6](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/2.6) for details
 
 ## Version 2.5
 
@@ -134,7 +134,7 @@
   - Automatically detects model configuration from checkpoint keys
 - Reorganized node documentation order
 - Updated SDXL DiT Loader with advanced user warning
-- See [Release Notes v2.5](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.5) for details
+- See [Release Notes v2.5](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/2.5) for details
 
 ## Version 2.4
 
@@ -144,7 +144,7 @@
   - Requires Flash Attention 2 to be installed in your environment
   - Can be disabled via the `enable_fa2` parameter if needed
 - Updated SDXL DiT Loader node image
-- See [Release Notes v2.4](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.4) for details
+- See [Release Notes v2.4](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/2.4) for details
 
 ## Version 2.3
 
@@ -154,12 +154,12 @@
 - Fixed module reference separation to prevent data loss
 - Optimized cache similarity calculation using fused kernels
 - Added Flash Attention 2 support for SDXL DiT Loader (optional, enabled by default)
-- See [Release Notes v2.3](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.3) for details
+- See [Release Notes v2.3](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/2.3) for details
 
 ## Version 2.2
 
 - Added First Block Cache feature for Nunchaku SDXL models
-- See [Release Notes v2.2](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/2.2) for details
+- See [Release Notes v2.2](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/2.2) for details
 
 ## Version 2.1
 
@@ -181,4 +181,4 @@
 
 ## 2025-12-25
 
-- Fixed import error for `NunchakuZImageDiTLoader` node by improving alternative import method with better path resolution (see [Issue #1](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/issues/1))
+- Fixed import error for `NunchakuZImageDiTLoader` node by improving alternative import method with better path resolution (see [Issue #1](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/issues/1))

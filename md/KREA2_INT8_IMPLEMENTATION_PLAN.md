@@ -1,7 +1,7 @@
 # Krea2 INT8 — Implementation Plan
 
 Date: 2026-07-19  
-Repository: `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
+Repository: `ussoewwin/ComfyUI-HSWQ-Loader-and-Tools`  
 Primary goal: **end-to-end Krea2 INT8 (including `*Int8Convrot*`) in ComfyUI via this custom node**, before Forge-Nunchaku follow-up.
 
 **Authoritative reference (read-only):** `D:\ComfyUI-INT8-Fast` / [BobJohnson24/ComfyUI-INT8-Fast](https://github.com/BobJohnson24/ComfyUI-INT8-Fast)

@@ -1,11 +1,11 @@
 # SDXL INT8 Normal Generation Break — Handoff False-Positive Fix (Complete Guide)
 
 **Date:** 2026-07-16  
-**Repository:** `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
+**Repository:** `ussoewwin/ComfyUI-HSWQ-Loader-and-Tools`  
 **Primary file:** `patches/comfy_quant_int8.py`  
 **Handoff marker after this fix:** `_VER = 10` (`_hswq_int8_nunchaku_handoff_ver`)  
 **Live Comfy sync target:**  
-`D:\USERFILES\ComfyUI\ComfyUI\custom_nodes\ComfyUI-nunchaku-unofficial-loader\patches\comfy_quant_int8.py`
+`D:\USERFILES\ComfyUI\ComfyUI\custom_nodes\ComfyUI-HSWQ-Loader-and-Tools\patches\comfy_quant_int8.py`
 
 This guide documents **only** the SDXL / native comfy_quant INT8 **normal generation** breakage caused by a **false-positive Nunchaku SVDQ detector** that armed the **INT8→Nunchaku VRAM handoff** on non-SVDQ loads. It is separate from the coexistence Abort guide (`md/HSWQ_INT8_NUNCHAKU_COEXISTENCE_GUIDE.md`), which covers the legitimate INT8 Dynamic → real SVDQ handoff path.
 
@@ -71,7 +71,7 @@ Detection used a **bare substring** on each module’s `type(module).__module__`
 "nunchaku" in __module__
 ```
 
-This extension lives under a custom-node directory whose name contains **`nunchaku`** (e.g. `ComfyUI-nunchaku-unofficial-loader`). INT8 `Conv2d` classes defined in `patches/comfy_quant_int8.py` therefore carry a `__module__` path that also contains **`nunchaku`**, even though they are **not** the real `nunchaku` Python package and **not** SVDQ kernels.
+This extension lives under a custom-node directory whose name contains **`nunchaku`** (e.g. `ComfyUI-HSWQ-Loader-and-Tools`). INT8 `Conv2d` classes defined in `patches/comfy_quant_int8.py` therefore carry a `__module__` path that also contains **`nunchaku`**, even though they are **not** the real `nunchaku` Python package and **not** SVDQ kernels.
 
 **Chain:**
 
@@ -130,7 +130,7 @@ Do **not** probe the ModelPatcher object alone for SVDQ (avoids extra false posi
 
 Repo file and the live Comfy custom_nodes copy must remain perfectly synced. The valid live target is:
 
-`D:\USERFILES\ComfyUI\ComfyUI\custom_nodes\ComfyUI-nunchaku-unofficial-loader\`
+`D:\USERFILES\ComfyUI\ComfyUI\custom_nodes\ComfyUI-HSWQ-Loader-and-Tools\`
 
 ---
 
@@ -139,7 +139,7 @@ Repo file and the live Comfy custom_nodes copy must remain perfectly synced. The
 | Path | Role |
 |---|---|
 | `patches/comfy_quant_int8.py` | **Only code file** for this repair (detector + handoff `_VER = 10`) |
-| Live mirror (must match) | `D:\USERFILES\ComfyUI\ComfyUI\custom_nodes\ComfyUI-nunchaku-unofficial-loader\patches\comfy_quant_int8.py` |
+| Live mirror (must match) | `D:\USERFILES\ComfyUI\ComfyUI\custom_nodes\ComfyUI-HSWQ-Loader-and-Tools\patches\comfy_quant_int8.py` |
 | This guide | `md/HSWQ_SDXL_INT8_HANDOFF_FALSE_POSITIVE_FIX_GUIDE.md` |
 
 No other production modules were required for this specific false-positive fix.

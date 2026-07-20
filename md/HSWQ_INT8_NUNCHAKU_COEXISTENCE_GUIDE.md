@@ -1,10 +1,10 @@
 # HSWQ INT8 and Nunchaku Coexistence — Complete Technical Guide
 
 **Date:** 2026-07-16 (rewritten after PinCache / Abort causation audit)  
-**Repository:** `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
+**Repository:** `ussoewwin/ComfyUI-HSWQ-Loader-and-Tools`  
 **Primary file:** `patches/comfy_quant_int8.py`  
 **Authoritative tree tip for this rewrite:** `4e51074` (`fix: remove Detailer Pin Buffer Cache again`) on top of `df9ba74` / `747b64b`  
-**PinCache status:** **Removed** (again). Not part of the INT8→Nunchaku Abort fix. See `md/HSWQ_PIN_BUFFER_CACHE_REMOVAL_GUIDE.md` and [v3.2.0](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.0).
+**PinCache status:** **Removed** (again). Not part of the INT8→Nunchaku Abort fix. See `md/HSWQ_PIN_BUFFER_CACHE_REMOVAL_GUIDE.md` and [v3.2.0](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.2.0).
 
 This document explains **INT8 HSWQ (Dynamic VRAM) → Nunchaku Z-Image (SVDQ)** failures in one ComfyUI process: **what Aborts look like**, **verified root causes**, **working countermeasures in `comfy_quant_int8.py`**, **what is explicitly not a countermeasure (Pin Buffer Cache / HostBuffer theater)**, and **how to read the code**.
 
@@ -180,7 +180,7 @@ Same helpers for handoff and bake:
 | `nodes/hswq_batched_detailer.py` | No `hswq_pin_cache_scope` wrapper after PinCache removal |
 
 Install copy (when synced):  
-`ComfyUI/custom_nodes/ComfyUI-nunchaku-unofficial-loader/patches/comfy_quant_int8.py`.
+`ComfyUI/custom_nodes/ComfyUI-HSWQ-Loader-and-Tools/patches/comfy_quant_int8.py`.
 
 Cross-doc: PinCache history and HostBuffer supersession → `md/HSWQ_PIN_BUFFER_CACHE_REMOVAL_GUIDE.md`.
 
@@ -454,7 +454,7 @@ Do not “complete” coexistence by symmetrically unloading Nunchaku for INT8 u
 
 Historical **Pin Buffer Cache** pooled pin tensors to avoid **destroy `_pin` → re-`cudaHostRegister`** on every Dynamic unload. It was a dual countermeasure with **HSWQ Batched Detailer** against **old pin lifecycle thrash**.
 
-After ComfyUI AIMDO **HostBuffer**, PinCache is **redundant and harmful**. Authoritative removal narrative: `md/HSWQ_PIN_BUFFER_CACHE_REMOVAL_GUIDE.md`, release [v3.2.0](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.2.0). Tree tip after Abort audit: **`4e51074`** removes PinCache again while **keeping** QT-only LowVram + `unpatch_all` handoff.
+After ComfyUI AIMDO **HostBuffer**, PinCache is **redundant and harmful**. Authoritative removal narrative: `md/HSWQ_PIN_BUFFER_CACHE_REMOVAL_GUIDE.md`, release [v3.2.0](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.2.0). Tree tip after Abort audit: **`4e51074`** removes PinCache again while **keeping** QT-only LowVram + `unpatch_all` handoff.
 
 ### B.2 Scope mismatch with INT8→Nunchaku
 

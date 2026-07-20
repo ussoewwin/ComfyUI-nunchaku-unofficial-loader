@@ -1,5 +1,5 @@
 """
-Patch inside ComfyUI-nunchaku-unofficial-loader to prevent mat1/mat2 shape
+Patch inside ComfyUI-HSWQ-Loader-and-Tools to prevent mat1/mat2 shape
 mismatches when running Z-Image + FP8 E4M3 + torch.compile.
 
 - LoRA: skip applying a layer when reshape or LoRA output numel does not match weight.

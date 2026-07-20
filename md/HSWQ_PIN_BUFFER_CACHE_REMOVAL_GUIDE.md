@@ -1,10 +1,10 @@
 # HSWQ Pin Buffer Cache Removal — Complete Technical Guide
 
 **Date:** 2026-07-16  
-**Repository:** `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
+**Repository:** `ussoewwin/ComfyUI-HSWQ-Loader-and-Tools`  
 **Removal commit:** `5d37ccfb03340c4cd1a84075ab78ce2fad452985`  
 **Parent (pre-removal tip):** `9fdfae3`  
-**Primary historical release:** [v3.1.0 — Pin Memory Problem and HSWQ Optimization](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.0)  
+**Primary historical release:** [v3.1.0 — Pin Memory Problem and HSWQ Optimization](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.1.0)  
 **ComfyUI tree used for verification:** `D:\USERFILES\ComfyUI\ComfyUI` (`comfyanonymous/ComfyUI`, tag/HEAD around **v0.27.1** / `c2638ce6c`)
 
 This document explains **why Pin Buffer Cache was introduced**, **what ComfyUI changed**, **why the cache is no longer needed**, **which files were modified**, **the full code that changed** (including the deleted module), and **the meaning of each change**.
@@ -314,7 +314,7 @@ So the pipeline does: VAE load → UNet load → VAE load → UNet load → … 
 
 - **Removed**: **HSWQ Pin Buffer Cache** (`nodes/hswq_pin_cache.py` and Detailer `hswq_pin_cache_scope`) — no longer needed after ComfyUI Dynamic VRAM / hostbuf updates. Use native ComfyUI pin behavior.
 - **Added**: Native **comfy_quant INT8** (`int8_tensorwise`) load path for SDXL checkpoints — **HSWQ FP8/INT8 Loader (VRAM Opt)** auto-detects INT8 vs Scaled FP8; **HSWQ FP8 E4M3 UNet Loader** gains `int8_tensorwise` / auto-detect. Extension-side Conv2d quant support and INT8-safe LoRA bake under Dynamic VRAM.
-- See [Release Notes v3.1.9](https://github.com/ussoewwin/ComfyUI-nunchaku-unofficial-loader/releases/tag/v3.1.9) for details.
+- See [Release Notes v3.1.9](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.1.9) for details.
 ```
 
 Note: Historical entries for **3.1.0** / **3.1.2** still describe the *past* addition and Detailer-scoping of PinCache. Those remain as changelog history.

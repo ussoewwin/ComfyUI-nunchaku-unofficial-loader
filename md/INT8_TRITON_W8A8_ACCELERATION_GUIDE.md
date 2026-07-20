@@ -5,7 +5,7 @@
 > The sections below are a historical record of the removed Plan B implementation (v3.2.6).
 
 Date: 2026-07-18  
-Repository: `ussoewwin/ComfyUI-nunchaku-unofficial-loader`  
+Repository: `ussoewwin/ComfyUI-HSWQ-Loader-and-Tools`  
 Canonical commit (added): `bf8a8a6` (`feat: add INT8 W8A8 Triton accelerate with tiled rowwise quant`)  
 Removed in: **v3.2.7**  
 Related plan: `md/INT8_TRITON_W8A8_PUBLIC_ACCELERATION_PLAN.md`
