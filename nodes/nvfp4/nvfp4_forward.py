@@ -21,7 +21,11 @@ from __future__ import annotations
 import logging
 import os
 
-from .nvfp4_hadamard import build_hadamard
+from .nvfp4_hadamard import (
+    build_hadamard,
+    rotate_weight_linear,
+    unrotate_weight_linear,
+)
 from .nvfp4_runtime import (
     ensure_act_scale,
     clear_nvfp4_cudagraphs,
@@ -37,6 +41,17 @@ logger = logging.getLogger(__name__)
 # Counters for bench / diagnostics (reset per run if needed)
 _TC_HITS = 0
 _DEQUANT_FALLBACKS = 0
+_LORA_CONVERT_LOGS = 0
+_LORA_SET_LOGS = 0
+_LORA_LOG_MAX = 8
+# Bump when convert_weight / set_weight ConvRot LoRA bake changes.
+_NVFP4_LORA_BAKE_VER = 1
+
+
+def reset_nvfp4_lora_log_counters() -> None:
+    global _LORA_CONVERT_LOGS, _LORA_SET_LOGS
+    _LORA_CONVERT_LOGS = 0
+    _LORA_SET_LOGS = 0
 
 
 def reset_nvfp4_forward_stats() -> None:
@@ -258,11 +273,11 @@ def make_nvfp4_linear_forward(stock_forward):
         if not getattr(self, "_hswq_nvfp4", False) or getattr(self, "_full_precision_mm", False):
             return stock_forward(self, input, *args, **kwargs)
 
-        # Training / LoRA / forced cast: fall back to stock (still ConvRot-armed there if wrap)
+        # Training / forced cast: fall back to stock
         if input.requires_grad or getattr(self, "comfy_force_cast_weights", False):
             return stock_forward(self, input, *args, **kwargs)
-        if len(getattr(self, "weight_function", [])) or len(getattr(self, "bias_function", [])):
-            return stock_forward(self, input, *args, **kwargs)
+        # LoRA weight_function: stay on HSWQ path (act ConvRot + cast_bias_weight
+        # with want_requant). Stock forward would skip act rotate → ConvRot break.
 
         run_every_op()
         input_shape = input.shape
@@ -285,15 +300,19 @@ def make_nvfp4_linear_forward(stock_forward):
 
         # 3) Weight / bias: skip cast_bias_weight when already on-device QT
         #    (cast+sync every Linear was a major share of NVFP4 > FP16 wall time).
+        #    Always cast when LoRA weight/bias_function present (need bake apply).
         offload_stream = None
         weight = self.weight
         if isinstance(weight, torch.nn.Parameter):
             weight = weight.data
         bias = self.bias.data if self.bias is not None else None
+        has_wf = len(getattr(self, "weight_function", []) or []) or len(
+            getattr(self, "bias_function", []) or []
+        )
         need_cast = weight.device != input_2d.device or (
             bias is not None and bias.device != input_2d.device
         )
-        if need_cast or hasattr(self, "_v"):
+        if has_wf or need_cast or hasattr(self, "_v"):
             weight, bias, offload_stream = cast_bias_weight(
                 self,
                 input_2d,
@@ -338,3 +357,99 @@ def make_nvfp4_linear_forward(stock_forward):
 
     forward_nvfp4._hswq_nvfp4_full_forward = True  # type: ignore[attr-defined]
     return forward_nvfp4
+
+
+def make_nvfp4_linear_convert_weight(stock_convert_weight):
+    """Wrap Linear.convert_weight: dequant then unrotate ConvRot weights for LoRA bake."""
+    import torch
+    from comfy.quant_ops import QuantizedTensor
+
+    def convert_weight(self, weight, inplace=False, **kwargs):
+        global _LORA_CONVERT_LOGS
+        if callable(stock_convert_weight):
+            out = stock_convert_weight(self, weight, inplace=inplace, **kwargs)
+        elif isinstance(weight, QuantizedTensor):
+            out = weight.dequantize()
+        else:
+            out = weight
+        if (
+            getattr(self, "_hswq_nvfp4_convrot", False)
+            and out is not None
+            and getattr(out, "ndim", 0) == 2
+        ):
+            gs = int(getattr(self, "_hswq_nvfp4_convrot_groupsize", 256) or 256)
+            h = build_hadamard(gs, device="cpu", dtype=torch.float32)
+            out = unrotate_weight_linear(out, h, gs)
+        if _LORA_CONVERT_LOGS < _LORA_LOG_MAX and getattr(
+            self, "_hswq_nvfp4_convrot", False
+        ):
+            _LORA_CONVERT_LOGS += 1
+            logger.info(
+                "[HSWQ NVFP4 LoRA] Linear.convert_weight #%s: unrotate ConvRot "
+                "in=%s/%s -> out=%s/%s",
+                _LORA_CONVERT_LOGS,
+                type(weight).__name__,
+                getattr(weight, "dtype", None),
+                type(out).__name__,
+                getattr(out, "dtype", None),
+            )
+        return out
+
+    convert_weight._hswq_nvfp4_lora_bake_ver = _NVFP4_LORA_BAKE_VER  # type: ignore[attr-defined]
+    return convert_weight
+
+
+def make_nvfp4_linear_set_weight(stock_set_weight):
+    """Wrap Linear.set_weight: re-rotate ConvRot float weights before requant."""
+    import torch
+
+    def set_weight(
+        self,
+        weight,
+        inplace_update=False,
+        seed=None,
+        return_weight=False,
+        **kwargs,
+    ):
+        global _LORA_SET_LOGS
+        if (
+            getattr(self, "_hswq_nvfp4_convrot", False)
+            and getattr(weight, "ndim", 0) == 2
+        ):
+            gs = int(getattr(self, "_hswq_nvfp4_convrot_groupsize", 256) or 256)
+            h = build_hadamard(gs, device="cpu", dtype=torch.float32)
+            weight = rotate_weight_linear(weight, h, gs)
+            if _LORA_SET_LOGS < _LORA_LOG_MAX:
+                _LORA_SET_LOGS += 1
+                logger.info(
+                    "[HSWQ NVFP4 LoRA] Linear.set_weight #%s: re-rotate ConvRot "
+                    "shape=%s layout=%s",
+                    _LORA_SET_LOGS,
+                    tuple(weight.shape) if hasattr(weight, "shape") else "?",
+                    getattr(self, "layout_type", None),
+                )
+        return stock_set_weight(
+            self,
+            weight,
+            inplace_update=inplace_update,
+            seed=seed,
+            return_weight=return_weight,
+            **kwargs,
+        )
+
+    set_weight._hswq_nvfp4_lora_bake_ver = _NVFP4_LORA_BAKE_VER  # type: ignore[attr-defined]
+    return set_weight
+
+
+def attach_nvfp4_linear_lora_bake(Lin) -> bool:
+    """Ensure MixedPrecision Linear has ConvRot LoRA convert/set wraps. Returns True if applied/upgraded."""
+    applied = False
+    cvt = getattr(Lin, "convert_weight", None)
+    if callable(cvt) and getattr(cvt, "_hswq_nvfp4_lora_bake_ver", 0) < _NVFP4_LORA_BAKE_VER:
+        Lin.convert_weight = make_nvfp4_linear_convert_weight(cvt)
+        applied = True
+    sw = getattr(Lin, "set_weight", None)
+    if callable(sw) and getattr(sw, "_hswq_nvfp4_lora_bake_ver", 0) < _NVFP4_LORA_BAKE_VER:
+        Lin.set_weight = make_nvfp4_linear_set_weight(sw)
+        applied = True
+    return applied

@@ -3,10 +3,11 @@ ComfyUI runtime monkey-patches for HSWQ comfy_quant NVFP4 (FULL ConvRot).
 
 Runtime only — never permanently edit ComfyUI-master.
 
-Owns (via sibling modules under benchmark/nvfp4/):
+Owns (via sibling modules under nodes/nvfp4/):
   - packed-K UNet detection (logical in_features)
   - full NVFP4 Linear load (scales, QT, ConvRot flags, storage validation)
   - full Tensor Core forward (act ConvRot → NVFP4 quant → scaled_mm_nvfp4)
+  - ConvRot NVFP4 Linear LoRA bake (convert_weight unrotate → set_weight re-rotate)
 
 This is not an INT8/FP8 “small tweak”: load + forward are HSWQ-owned stacks.
 """
@@ -22,14 +23,18 @@ from .nvfp4_conf import (
     logical_linear_in_features,
 )
 from .nvfp4_forward import (
+    attach_nvfp4_linear_lora_bake,
     make_nvfp4_linear_forward,
     nvfp4_forward_stats,
     reset_nvfp4_forward_stats,
+    reset_nvfp4_lora_log_counters,
 )
 from .nvfp4_load import load_nvfp4_linear_module, peek_nvfp4_conf
 
 logger = logging.getLogger(__name__)
 _PATCHES_APPLIED = False
+# Bump when NVFP4 stack contract changes (forces re-wire of mixed_precision_ops).
+_NVFP4_STACK_VER = 2
 
 # Re-export for benches / callers
 __all__ = [
@@ -43,6 +48,7 @@ __all__ = [
     "logical_linear_in_features",
     "nvfp4_forward_stats",
     "reset_nvfp4_forward_stats",
+    "reset_nvfp4_lora_log_counters",
 ]
 
 
@@ -52,11 +58,8 @@ def _console(msg: str) -> None:
 
 
 def apply_comfy_quant_nvfp4_patches() -> bool:
-    """Install NVFP4 detection + full load + full TC Linear forward once."""
+    """Install NVFP4 detection + full load + TC Linear forward + ConvRot LoRA bake."""
     global _PATCHES_APPLIED
-    if _PATCHES_APPLIED:
-        return True
-
     try:
         import comfy.model_detection as model_detection
         import comfy.ops as ops
@@ -64,8 +67,37 @@ def apply_comfy_quant_nvfp4_patches() -> bool:
         logger.warning("[HSWQ NVFP4] comfy import failed: %s", e)
         return False
 
-    if getattr(model_detection.detect_unet_config, "_hswq_nvfp4_packed_dims", False):
+    mp_fn = getattr(ops, "mixed_precision_ops", None)
+    stack_ver = int(getattr(mp_fn, "_hswq_nvfp4_stack_ver", 0) or 0) if mp_fn else 0
+    if (
+        _PATCHES_APPLIED
+        and getattr(model_detection.detect_unet_config, "_hswq_nvfp4_packed_dims", False)
+        and stack_ver >= _NVFP4_STACK_VER
+    ):
+        return True
+
+    # Already patched detect/load but LoRA bake missing: re-wrap mixed_precision_ops only.
+    if getattr(model_detection.detect_unet_config, "_hswq_nvfp4_packed_dims", False) and stack_ver < _NVFP4_STACK_VER:
+        _orig_mp = getattr(mp_fn, "_hswq_nvfp4_orig_mp", mp_fn)
+
+        def mixed_precision_ops_upgraded(*args, **kwargs):
+            mp = _orig_mp(*args, **kwargs)
+            Lin = mp.Linear
+            if not getattr(Lin.forward, "_hswq_nvfp4_full_forward", False):
+                Lin.forward = make_nvfp4_linear_forward(Lin.forward)
+            attach_nvfp4_linear_lora_bake(Lin)
+            return mp
+
+        mixed_precision_ops_upgraded._hswq_nvfp4_full_forward = True  # type: ignore[attr-defined]
+        mixed_precision_ops_upgraded._hswq_nvfp4_stack_ver = _NVFP4_STACK_VER  # type: ignore[attr-defined]
+        mixed_precision_ops_upgraded._hswq_nvfp4_orig_mp = _orig_mp  # type: ignore[attr-defined]
+        ops.mixed_precision_ops = mixed_precision_ops_upgraded
         _PATCHES_APPLIED = True
+        _console(
+            "[HSWQ NVFP4] upgraded stack ver=%s "
+            "(ConvRot Linear LoRA bake: convert_weight unrotate + set_weight re-rotate)"
+            % _NVFP4_STACK_VER
+        )
         return True
 
     _orig_detect = model_detection.detect_unet_config
@@ -169,9 +201,9 @@ def apply_comfy_quant_nvfp4_patches() -> bool:
     def mixed_precision_ops_patched(*args, **kwargs):
         mp = _orig_mp(*args, **kwargs)
         Lin = mp.Linear
-        if getattr(Lin.forward, "_hswq_nvfp4_full_forward", False):
-            return mp
-        Lin.forward = make_nvfp4_linear_forward(Lin.forward)
+        if not getattr(Lin.forward, "_hswq_nvfp4_full_forward", False):
+            Lin.forward = make_nvfp4_linear_forward(Lin.forward)
+        attach_nvfp4_linear_lora_bake(Lin)
         return mp
 
     model_detection.calculate_transformer_depth = calculate_transformer_depth_patched
@@ -185,12 +217,14 @@ def apply_comfy_quant_nvfp4_patches() -> bool:
     model_config_from_unet_patched._hswq_nvfp4_packed_dims = True  # type: ignore[attr-defined]
     _load_quantized_module_patched._hswq_nvfp4_full_load = True  # type: ignore[attr-defined]
     mixed_precision_ops_patched._hswq_nvfp4_full_forward = True  # type: ignore[attr-defined]
+    mixed_precision_ops_patched._hswq_nvfp4_stack_ver = _NVFP4_STACK_VER  # type: ignore[attr-defined]
+    mixed_precision_ops_patched._hswq_nvfp4_orig_mp = _orig_mp  # type: ignore[attr-defined]
 
     _PATCHES_APPLIED = True
     _console(
         "[HSWQ NVFP4] full stack applied "
-        "(detect packed K + nvfp4_load + TC forward scaled_mm_nvfp4 + ConvRot act; "
-        "ComfyUI-master untouched)"
+        "(detect packed K + nvfp4_load + TC forward + ConvRot act + "
+        "ConvRot Linear LoRA bake; ComfyUI-master untouched)"
     )
     return True
 
@@ -228,9 +262,11 @@ def load_checkpoint_sdxl_nvfp4_weight_dtype(ckpt_name, weight_dtype, device=None
         # Mixed pack: Linear=nvfp4, Conv2d=int8_tensorwise (+ ConvRot) — same as bench.
         apply_comfy_quant_int8_patches()
         reset_int8_lora_log_counters()
+        reset_nvfp4_lora_log_counters()
         sdxl_logger.info(
             "[SDXL NVFP4] Loading checkpoint via MixedPrecisionOps "
-            "(nvfp4 Linear + int8 Conv / ConvRot): %s (weight_dtype=%s)",
+            "(nvfp4 Linear + int8 Conv / ConvRot + ConvRot Linear LoRA bake): "
+            "%s (weight_dtype=%s)",
             ckpt_name,
             weight_dtype,
         )

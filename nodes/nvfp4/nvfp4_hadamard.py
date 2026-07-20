@@ -98,6 +98,40 @@ def rotate_last_dim(x, h_matrix, group_size: int):
     return torch.matmul(x_grouped, h).reshape(orig_shape)
 
 
+def rotate_weight_linear(weight, h_matrix, group_size: int):
+    """Offline Linear: W_rot = W @ H^T (group-wise along in_features)."""
+    import torch
+
+    if getattr(weight, "ndim", 0) != 2:
+        raise ValueError(f"Linear weight must be 2D, got ndim={getattr(weight, 'ndim', None)}")
+    out_features, in_features = weight.shape
+    if in_features % group_size != 0:
+        raise ValueError(
+            f"in_features {in_features} not divisible by group_size {group_size}"
+        )
+    group_count = in_features // group_size
+    weight_grouped = weight.view(out_features, group_count, group_size)
+    h_t = h_matrix.T.to(dtype=weight.dtype, device=weight.device)
+    return torch.matmul(weight_grouped, h_t).reshape(weight.shape)
+
+
+def unrotate_weight_linear(weight, h_matrix, group_size: int):
+    """Inverse of rotate_weight_linear: W = W_rot @ H (for LoRA float space)."""
+    import torch
+
+    if getattr(weight, "ndim", 0) != 2:
+        raise ValueError(f"Linear weight must be 2D, got ndim={getattr(weight, 'ndim', None)}")
+    out_features, in_features = weight.shape
+    if in_features % group_size != 0:
+        raise ValueError(
+            f"in_features {in_features} not divisible by group_size {group_size}"
+        )
+    group_count = in_features // group_size
+    weight_grouped = weight.view(out_features, group_count, group_size)
+    h = h_matrix.to(dtype=weight.dtype, device=weight.device)
+    return torch.matmul(weight_grouped, h).reshape(weight.shape)
+
+
 def rotate_last_dim_fast(x, group_size: int):
     """Same math as ``rotate_last_dim`` + ``build_hadamard``, O(n log n) butterflies.
 
