@@ -210,7 +210,6 @@ See [changelog.md](changelog.md).
 
 * Quantized models (e.g., SVDQ / FP4 / INT4) are considered **derivative works** of the original checkpoints.
 * Before sharing or redistributing quantized models, verify that the **original model license explicitly allows redistribution and derivative works**.
-* Many SDXL-based models **do not permit redistribution**, even in quantized form.
 
 ## License (Apache License 2.0)
 
