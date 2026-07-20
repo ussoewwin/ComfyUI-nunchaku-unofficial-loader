@@ -205,22 +205,6 @@ In Forge, RES4LYF's `beta/__init__.py` dynamically generates wrapper functions c
 - **Extensibility**: Designed as a thin UI wrapper so future HSWQ / Z-Image quantized-inference arguments can be intercepted in `sample()` without patching the ComfyUI core
 - **Details**: See `md/hswq_sampler_technical_reference.md`
 
-### Nunchaku-ussoewwin Z-Image-Turbo DiT Loader
-
-⚠️ **WARNING**: This is an **unofficial experimental loader** created as a prototype before the release of ComfyUI-Nunchaku 1.1.0. This is the author's personal testing environment. **Do not use this node.**
-
-ComfyUI node for loading Nunchaku-quantized Z-Image-Turbo models. This node provides support for loading 4-bit quantized Z-Image-Turbo models that have been processed using SVDQuant quantization.
-
-<img src="png/node.png" alt="Nunchaku-ussoewwin Z-Image-Turbo DiT Loader Node" width="400">
-
-#### Features
-
-- **Model Loading**: Loads Nunchaku-quantized Z-Image-Turbo diffusion transformer models
-- **CPU Offloading**: Automatic or manual CPU offloading support to reduce VRAM usage
-- **Memory Management**: Configurable GPU memory usage with transformer block offloading options
-- **Hardware Compatibility**: Automatic hardware compatibility checks for quantization support
-- **Precision Support**: Supports both INT4 and FP4 quantization precisions
-
 ## Changelog
 
 See [changelog.md](changelog.md).
