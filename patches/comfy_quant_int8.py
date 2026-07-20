@@ -452,6 +452,134 @@ def _probe_path_comfy_quant_int8(path: str) -> bool:
     return False
 
 
+def _comfy_quant_conf_has_convrot(conf) -> bool:
+    if not isinstance(conf, dict):
+        return False
+    if conf.get("convrot") is True:
+        return True
+    params = conf.get("params")
+    if isinstance(params, dict) and params.get("convrot") is True:
+        return True
+    return False
+
+
+def checkpoint_looks_like_comfy_quant_convrot(state_dict_or_path) -> bool:
+    """True if checkpoint marks int8_tensorwise layers with ConvRot (Hadamard)."""
+    if isinstance(state_dict_or_path, (str, os.PathLike)):
+        return _probe_path_comfy_quant_convrot(str(state_dict_or_path))
+
+    state_dict = state_dict_or_path
+    import torch
+
+    for key, value in state_dict.items():
+        if not key.endswith(".comfy_quant"):
+            continue
+        if not torch.is_tensor(value) and not isinstance(value, (dict, bytes, bytearray, str)):
+            continue
+        conf = decode_comfy_quant_conf(value)
+        if _comfy_quant_conf_has_convrot(conf):
+            return True
+    return False
+
+
+def checkpoint_needs_hswq_int8_conv2d(state_dict_or_path) -> bool:
+    """True for SDXL/ZI-style UNets that need HSWQ INT8 Conv2d patches.
+
+    Keyed off architecture (``input_blocks`` / ``middle_block`` / ``output_blocks``),
+    not off ConvRot. DiT/Krea2 (``double_blocks`` / ``single_blocks``) returns False
+    so ConvRot stock load stays free of our Conv2d inject (VRAM).
+    """
+    if isinstance(state_dict_or_path, (str, os.PathLike)):
+        return _probe_path_needs_hswq_int8_conv2d(str(state_dict_or_path))
+
+    keys = list(state_dict_or_path.keys())
+    return _keys_need_hswq_int8_conv2d(keys)
+
+
+def _keys_need_hswq_int8_conv2d(keys) -> bool:
+    sdxl = False
+    dit = False
+    for k in keys:
+        if (
+            ".input_blocks." in k
+            or ".middle_block." in k
+            or ".output_blocks." in k
+            or k.startswith("input_blocks.")
+            or k.startswith("middle_block.")
+            or k.startswith("output_blocks.")
+        ):
+            sdxl = True
+        if (
+            ".double_blocks." in k
+            or ".single_blocks." in k
+            or ".joint_blocks." in k
+            or k.startswith("double_blocks.")
+            or k.startswith("single_blocks.")
+            or k.startswith("joint_blocks.")
+        ):
+            dit = True
+        if sdxl and dit:
+            break
+    # Prefer SDXL Conv2d path when UNet blocks exist; DiT-only → no inject.
+    if sdxl:
+        return True
+    return False
+
+
+def _probe_path_needs_hswq_int8_conv2d(path: str) -> bool:
+    try:
+        from safetensors import safe_open
+    except ImportError:
+        # Filename heuristics only as last resort.
+        base = os.path.basename(path).lower()
+        if "krea" in base or "dit" in base:
+            return False
+        return True
+    try:
+        with safe_open(path, framework="pt", device="cpu") as f:
+            return _keys_need_hswq_int8_conv2d(list(f.keys()))
+    except Exception as e:
+        logger.debug("[HSWQ INT8] SDXL/ZI Conv2d need probe failed for %s: %s", path, e)
+        base = os.path.basename(path).lower()
+        if "krea" in base or "convrot" in base or "int8convrot" in base:
+            return False
+        return True
+
+
+def _probe_path_comfy_quant_convrot(path: str) -> bool:
+    """Lightweight safetensors probe for comfy_quant.convrot=true."""
+    try:
+        from safetensors import safe_open
+    except ImportError:
+        return "convrot" in os.path.basename(path).lower()
+    base = os.path.basename(path).lower()
+    name_hint = "convrot" in base or "int8convrot" in base
+    comfy_keys = []
+    try:
+        with safe_open(path, framework="pt", device="cpu") as f:
+            keys = list(f.keys())
+            comfy_keys = [k for k in keys if k.endswith(".comfy_quant")]
+            for ck in comfy_keys[:32]:
+                conf = decode_comfy_quant_conf(f.get_tensor(ck))
+                if _comfy_quant_conf_has_convrot(conf):
+                    return True
+            meta = f.metadata() or {}
+            if "_quantization_metadata" in meta:
+                try:
+                    qm = json.loads(meta["_quantization_metadata"])
+                    layers = qm.get("layers", {}) if isinstance(qm, dict) else {}
+                    for v in layers.values():
+                        if isinstance(v, dict) and _comfy_quant_conf_has_convrot(v):
+                            return True
+                except (TypeError, json.JSONDecodeError):
+                    pass
+    except Exception as e:
+        logger.debug("[HSWQ INT8] ConvRot probe failed for %s: %s", path, e)
+        return name_hint
+    # Filename alone is enough for *Int8Convrot* when markers were stripped/odd.
+    return name_hint
+
+
 def _normalize_comfy_quant_tensor(value):
     import torch
 
@@ -543,9 +671,13 @@ def _int8_quant_conv_scope():
 
 
 def _should_inject_int8_conv(quant_config) -> bool:
-    if getattr(_int8_quant_conv_tls, "active", False):
-        return True
-    return _quant_config_has_int8_tensorwise(quant_config)
+    # Only while an HSWQ INT8 UNet/Checkpoint load explicitly opens the scope.
+    # Do NOT key off quant_config alone: once mixed_precision_ops is monkeypatched,
+    # stock UNETLoader / Krea2 ConvRot loads also build MixedPrecisionOps with
+    # int8_tensorwise config — injecting our Conv2d there is wrong for DiT/ConvRot
+    # and can inflate VRAM vs stock.
+    _ = quant_config
+    return bool(getattr(_int8_quant_conv_tls, "active", False))
 
 
 def _module_path_is_real_nunchaku_package(mod: str) -> bool:
@@ -646,6 +778,90 @@ def _model_has_int8_quantized_weights(model) -> bool:
     return False
 
 
+def _load_native_convert_int8_helpers():
+    """Lazy-load Hadamard / rotate helpers from sibling native_convert_int8.py."""
+    import importlib.util
+
+    global _NATIVE_CONVERT_INT8_MOD
+    if _NATIVE_CONVERT_INT8_MOD is not None:
+        return _NATIVE_CONVERT_INT8_MOD
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = os.path.join(root, "native_convert_int8.py")
+    if not os.path.isfile(path):
+        raise FileNotFoundError(f"native_convert_int8.py not found: {path}")
+    name = "native_convert_int8_for_hswq_conv2d"
+    spec = importlib.util.spec_from_file_location(name, path)
+    if spec is None or spec.loader is None:
+        raise ImportError(f"Cannot load module spec for {path}")
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    _NATIVE_CONVERT_INT8_MOD = mod
+    return mod
+
+
+_NATIVE_CONVERT_INT8_MOD = None
+
+
+def _qt_payload(weight, QuantizedTensor):
+    """Unwrap Parameter → QuantizedTensor if needed."""
+    if weight is None:
+        return None
+    if isinstance(weight, QuantizedTensor):
+        return weight
+    data = getattr(weight, "data", None)
+    if isinstance(data, QuantizedTensor):
+        return data
+    return None
+
+
+def _arm_hswq_conv2d_convrot(module, QuantizedTensor):
+    """Full ConvRot on Conv2d: keep online rotate on module; clear kitchen Params.convrot.
+
+    Kitchen dequantize_int8_convrot_* is 2D-only. Stamping Params.convrot=True on
+    4D weights and calling .dequantize() crashes. Weights stay in rotated basis;
+    forward rotates NCHW activations; LoRA convert_weight unrotates to float space.
+    """
+    import dataclasses
+
+    import torch
+
+    qt = _qt_payload(getattr(module, "weight", None), QuantizedTensor)
+    if qt is None:
+        return
+    params = getattr(qt, "_params", None)
+    qdata = getattr(qt, "_qdata", None)
+    if params is None or qdata is None:
+        return
+    if getattr(qdata, "ndim", None) != 4:
+        return
+    if not bool(getattr(params, "convrot", False)):
+        return
+
+    gs = int(getattr(params, "convrot_groupsize", 256) or 256)
+    module._hswq_convrot = True
+    module._hswq_convrot_groupsize = gs
+    new_params = dataclasses.replace(params, convrot=False)
+    # Prefer in-place params swap. Reconstructing QT needs layout *string*
+    # (_layout_cls), not a layout object — wrong arg → empty AssertionError.
+    try:
+        object.__setattr__(qt, "_params", new_params)
+        return
+    except Exception:
+        pass
+    try:
+        qt._params = new_params
+        return
+    except Exception:
+        pass
+    layout_cls = getattr(qt, "_layout_cls", None)
+    if not isinstance(layout_cls, str):
+        layout_cls = getattr(module, "layout_type", None)
+    if not isinstance(layout_cls, str):
+        return
+    new_qt = type(qt)(qdata, layout_cls, new_params)
+    module.weight = torch.nn.Parameter(new_qt, requires_grad=False)
+
+
 def _make_quantized_conv2d(ops_module, MixedPrecisionOps, disabled):
     """Build MixedPrecisionOps.Conv2d class using current comfy.ops helpers."""
     import torch
@@ -710,16 +926,34 @@ def _make_quantized_conv2d(ops_module, MixedPrecisionOps, disabled):
             self.layout_type = None
             self._full_precision_mm = MixedPrecisionOps._full_precision_mm
             self._full_precision_mm_config = False
+            self._hswq_convrot = False
+            self._hswq_convrot_groupsize = 256
 
         def reset_parameters(self):
             return None
 
         def _load_from_state_dict(self, *args):
             _load_quantized_module(self, super()._load_from_state_dict, *args, load_extra_params=False)
+            _arm_hswq_conv2d_convrot(self, QuantizedTensor)
 
         def state_dict(self, *args, destination=None, prefix="", **kwargs):
             sd = destination if destination is not None else {}
-            return _quantized_weight_state_dict(self, sd, prefix)
+            sd = _quantized_weight_state_dict(self, sd, prefix)
+            # Re-stamp ConvRot on export (Params.convrot cleared for safe 4D dequant).
+            if getattr(self, "_hswq_convrot", False):
+                cq_key = f"{prefix}comfy_quant"
+                conf = {
+                    "format": "int8_tensorwise",
+                    "convrot": True,
+                    "convrot_groupsize": int(
+                        getattr(self, "_hswq_convrot_groupsize", 256) or 256
+                    ),
+                }
+                sd[cq_key] = torch.tensor(
+                    list(json.dumps(conf, separators=(",", ":")).encode("utf-8")),
+                    dtype=torch.uint8,
+                )
+            return sd
 
         def _conv_forward(self, input, weight, bias):
             if self.padding_mode != "zeros":
@@ -743,6 +977,11 @@ def _make_quantized_conv2d(ops_module, MixedPrecisionOps, disabled):
             # Dynamic VRAM uses weight_lowvram_function, want_requant=True so
             # post_cast dequant → LoRA → requant (want_requant=False left QT
             # in the resident path after the first step and killed LoRA).
+            if getattr(self, "_hswq_convrot", False):
+                nc = _load_native_convert_int8_helpers()
+                gs = int(getattr(self, "_hswq_convrot_groupsize", 256) or 256)
+                h = nc.build_hadamard(gs, device="cpu", dtype=torch.float32)
+                input = nc.rotate_activation_nchw(input, h, gs)
             want_requant = isinstance(getattr(self, "weight", None), QuantizedTensor)
             weight, bias, offload_stream = cast_bias_weight(
                 self,
@@ -762,8 +1001,40 @@ def _make_quantized_conv2d(ops_module, MixedPrecisionOps, disabled):
         def convert_weight(self, weight, inplace=False, **kwargs):
             # Same contract as MixedPrecisionOps.Linear: LoRA / ModelPatcher
             # dequant → calculate_weight → set_weight (see ComfyUI-INT8-Fast bake path).
+            # ConvRot weights are stored rotated; unrotate to original float basis for LoRA.
+            # LowVRAM may re-materialize QT with Params.convrot still True — clear
+            # before dequantize (kitchen ConvRot dequant is 2D-only).
             global _lora_convert_logs
-            out = weight.dequantize() if isinstance(weight, QuantizedTensor) else weight
+            if isinstance(weight, QuantizedTensor):
+                _arm_hswq_conv2d_convrot(self, QuantizedTensor)
+                qt = _qt_payload(weight, QuantizedTensor)
+                if qt is not None:
+                    params = getattr(qt, "_params", None)
+                    qdata = getattr(qt, "_qdata", None)
+                    if (
+                        params is not None
+                        and qdata is not None
+                        and getattr(qdata, "ndim", None) == 4
+                        and bool(getattr(params, "convrot", False))
+                    ):
+                        import dataclasses
+
+                        gs = int(getattr(params, "convrot_groupsize", 256) or 256)
+                        self._hswq_convrot = True
+                        self._hswq_convrot_groupsize = gs
+                        new_params = dataclasses.replace(params, convrot=False)
+                        try:
+                            object.__setattr__(qt, "_params", new_params)
+                        except Exception:
+                            qt._params = new_params
+                out = weight.dequantize()
+            else:
+                out = weight
+            if getattr(self, "_hswq_convrot", False) and out is not None and getattr(out, "ndim", 0) == 4:
+                nc = _load_native_convert_int8_helpers()
+                gs = int(getattr(self, "_hswq_convrot_groupsize", 256) or 256)
+                h = nc.build_hadamard(gs, device="cpu", dtype=torch.float32)
+                out = nc.unrotate_weight_conv2d(out, h, gs)
             if _lora_convert_logs < _LORA_CONVERT_LOG_MAX:
                 _lora_convert_logs += 1
                 wdtype = getattr(weight, "dtype", None)
@@ -771,7 +1042,8 @@ def _make_quantized_conv2d(ops_module, MixedPrecisionOps, disabled):
                 _console(
                     f"[HSWQ INT8 LoRA] Conv2d.convert_weight #{_lora_convert_logs}: "
                     f"in={type(weight).__name__}/{wdtype} -> out={type(out).__name__}/{odtype} "
-                    f"layout={getattr(self, 'layout_type', None)}"
+                    f"layout={getattr(self, 'layout_type', None)} "
+                    f"convrot={getattr(self, '_hswq_convrot', False)}"
                 )
             return out
 
@@ -779,16 +1051,23 @@ def _make_quantized_conv2d(ops_module, MixedPrecisionOps, disabled):
             # Mirror MixedPrecisionOps.Linear.set_weight so Conv2d LoRA bake
             # does not fall through to stochastic_rounding(..., int8), which
             # destroys float LoRA deltas (INT8-Fast: normal LoRA loader works).
+            # ConvRot: convert_weight returned unrotated float; re-rotate before requant.
             global _lora_set_logs
             layout = getattr(self, "layout_type", None)
             path = "requant" if layout is not None else "cast_only"
+            if getattr(self, "_hswq_convrot", False) and getattr(weight, "ndim", 0) == 4:
+                nc = _load_native_convert_int8_helpers()
+                gs = int(getattr(self, "_hswq_convrot_groupsize", 256) or 256)
+                h = nc.build_hadamard(gs, device="cpu", dtype=torch.float32)
+                weight = nc.rotate_weight_conv2d(weight, h, gs)
             if _lora_set_logs < _LORA_SET_LOG_MAX:
                 _lora_set_logs += 1
                 _console(
                     f"[HSWQ INT8 LoRA] Conv2d.set_weight #{_lora_set_logs}: "
                     f"path={path} float_in={getattr(weight, 'dtype', None)} "
                     f"shape={tuple(weight.shape) if hasattr(weight, 'shape') else '?'} "
-                    f"seed={seed} layout={layout}"
+                    f"seed={seed} layout={layout} "
+                    f"convrot={getattr(self, '_hswq_convrot', False)}"
                 )
             if layout is not None:
                 weight = self.weight.requantize_from_float(
@@ -870,7 +1149,7 @@ def _patch_ops_decode_and_conv() -> bool:
     original_mp = getattr(ops_module, "mixed_precision_ops", None)
     if original_mp is None or not callable(original_mp):
         return False
-    _OPS_PATCH_VER = 2
+    _OPS_PATCH_VER = 4  # Conv2d full ConvRot: online act rotate + safe 4D dequant
     true_orig = getattr(original_mp, "_hswq_orig_mixed_precision_ops", original_mp)
     if (
         getattr(original_mp, "_hswq_int8_ops_ver", 0) >= _OPS_PATCH_VER
@@ -895,9 +1174,9 @@ def _patch_ops_decode_and_conv() -> bool:
             full_precision_mm=full_precision_mm,
             disabled=disabled,
         )
-        # Inject Quantized Conv2d only during INT8 load scope (or explicit
-        # int8_tensorwise quant_config). FP MixedPrecisionOps must keep upstream
-        # Conv2d — detect_layer_quantization() is {"mixed_ops": True} for both.
+        # Inject Quantized Conv2d only during HSWQ INT8 load scope
+        # (_int8_quant_conv_scope). Never from quant_config alone — that would
+        # also hit stock UNETLoader / Krea2 ConvRot MixedPrecision builds.
         if _should_inject_int8_conv(quant_config):
             result.Conv2d = _make_quantized_conv2d(ops_module, result, disabled)
         return result
@@ -1920,10 +2199,11 @@ def apply_comfy_quant_int8_patches() -> bool:
     ok_dyn_bake = _patch_model_patcher_dynamic_int8_lora_bake()
     ok_handoff = _patch_load_models_gpu_int8_nunchaku_handoff()
     ok_controllora = _patch_controllora_int8_dequant()
+    # Re-apply ops when patch version bumps (e.g. Conv2d inject gate change).
+    ok_ops = _patch_ops_decode_and_conv()
     if _PATCHES_APPLIED:
         return True
     ok_utils = _patch_convert_old_quants()
-    ok_ops = _patch_ops_decode_and_conv()
     ok_lora_log = _patch_model_patcher_lora_logs()
     if ok_ops:
         _PATCHES_APPLIED = True
@@ -1954,17 +2234,44 @@ def load_unet_hswq_weight_dtype(unet_name, weight_dtype):
     import folder_paths
     import comfy.sd
 
-    # INT8 Conv2d + comfy_quant decode patches only when loading INT8.
-    # Do not apply for FP8 / default weight_dtype (those stay on original path).
+    # INT8 Conv2d patches: SDXL/ZI UNet (architecture), even if Linear has ConvRot.
+    # Krea2/DiT ConvRot: stock-equivalent load — Conv2d inject inflates VRAM vs stock.
     unet_path = folder_paths.get_full_path_or_raise("diffusion_models", unet_name)
+    is_convrot = checkpoint_looks_like_comfy_quant_convrot(unet_path)
     is_int8 = weight_dtype == "int8_tensorwise" or checkpoint_looks_like_comfy_quant_int8(unet_path)
+    needs_conv2d = checkpoint_needs_hswq_int8_conv2d(unet_path)
 
-    if is_int8:
+    if is_int8 and is_convrot and not needs_conv2d:
+        model_options = {}
+        logging.info(
+            "[HSWQ INT8] DiT/Krea2 ConvRot — stock-equivalent load "
+            "(no INT8 Conv2d patches): %s",
+            unet_name,
+        )
+        print(
+            f"[HSWQ INT8] ConvRot DiT/Krea2 stock-equivalent load: {unet_name}",
+            flush=True,
+        )
+        model = comfy.sd.load_diffusion_model(unet_path, model_options=model_options)
+    elif is_int8:
         apply_comfy_quant_int8_patches()
         model_options = {}
         reset_int8_lora_log_counters()
-        logging.info("[HSWQ INT8] Loading UNet via MixedPrecisionOps (int8_tensorwise / comfy_quant)")
-        print(f"[HSWQ INT8] Loading UNet: {unet_name}", flush=True)
+        if is_convrot and needs_conv2d:
+            logging.info(
+                "[HSWQ INT8] SDXL/ZI + ConvRot FULL — MixedPrecision + INT8 Conv2d "
+                "(Linear: kitchen online; Conv2d: HSWQ online act rotate): %s",
+                unet_name,
+            )
+            print(
+                f"[HSWQ INT8] SDXL/ZI ConvRot FULL (Linear+Conv2d) load: {unet_name}",
+                flush=True,
+            )
+        else:
+            logging.info(
+                "[HSWQ INT8] Loading UNet via MixedPrecisionOps (int8_tensorwise / comfy_quant)"
+            )
+            print(f"[HSWQ INT8] Loading UNet: {unet_name}", flush=True)
         with _int8_quant_conv_scope():
             model = comfy.sd.load_diffusion_model(unet_path, model_options=model_options)
         summarize_int8_lora_capability(model)

@@ -608,6 +608,14 @@ try:
 except Exception as e:
     logger.exception("[HSWQ NVFP4] install_nvfp4_option_dispatch: %s", e)
 
+# SDXL LoRA Stack V3 (INT8 / NVFP4 / standard via load_lora_for_models bake path)
+try:
+    from .nodes.lora.sdxl_v3 import GENERATED_NODES as _SDXL_LORA_V3_NODES
+    NODE_CLASS_MAPPINGS.update(_SDXL_LORA_V3_NODES)
+    logger.info("Registered NunchakuUssoewwinSDXLLoraStackV3")
+except Exception as e:
+    logger.exception("[SDXL LoRA] NunchakuUssoewwinSDXLLoraStackV3: %s", e)
+
 # HSWQ Batched Detailer (SEGS) - phase-split version to minimize model switching
 try:
     from .nodes.hswq_batched_detailer import HSWQBatchedDetailer
