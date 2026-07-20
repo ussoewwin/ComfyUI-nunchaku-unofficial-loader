@@ -12,8 +12,8 @@ HSWQ is a high-fidelity quantization line for diffusion UNets. Current public HS
 
 | Path | Role in this repo |
 | :--- | :--- |
-| **HSWQ ConvRot INT8 (SDXL V3.1)** | ComfyUI `int8_tensorwise` packs; load via **HSWQ Checkpoint Loader (SDXL)** (`weight_dtype`: `int8_tensorwise` / INT8 auto-detect) |
-| **HSWQ ConvRot NVFP4 (SDXL)** | ComfyUI `nvfp4` packs (Linear→NVFP4, Conv2d→INT8 + ConvRot); load via the **same** **HSWQ Checkpoint Loader (SDXL)** (`weight_dtype`: `ConvRot NVFP4`, or `default` with NVFP4 auto-detect) |
+| **HSWQ ConvRot INT8 (SDXL V3.1)** | ComfyUI `int8_tensorwise` packs; load via **HSWQ Checkpoint Loader (SDXL)** (`weight_dtype`: `int8_tensorwise` / INT8 auto-detect). **Supported only for models quantized with [Hybrid-Sensitivity-Weighted-Quantization](https://github.com/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization).** |
+| **HSWQ ConvRot NVFP4 (SDXL)** | ComfyUI `nvfp4` packs (Linear→NVFP4, Conv2d→INT8 + ConvRot); load via the **same** **HSWQ Checkpoint Loader (SDXL)** (`weight_dtype`: `ConvRot NVFP4`, or `default` with NVFP4 auto-detect). **Supported only for models quantized with [Hybrid-Sensitivity-Weighted-Quantization](https://github.com/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization).** |
 | **FP8 (E4M3)** | HSWQ **FP8 development has ended** (technical docs remain upstream). Loaders here may still accept existing FP8 weights where ComfyUI supports them |
 | **Z Image 8-bit** | HSWQ-specific Z Image INT8 development / publication **ended**. Prefer **native ConvRot INT8** for Z Image (typically SSIM > 0.99). HSWQ INT8 continues for **SDXL** |
 
@@ -51,7 +51,9 @@ Restart ComfyUI to load the nodes.
 
 <img src="png/fp8e4m3.png?v=3" alt="HSWQ Checkpoint Loader (SDXL) Node" width="400">
 
-ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, with optional device selection and **FP8 / INT8 / ConvRot NVFP4** precision support. Use it like the standard Load Checkpoint node; it outputs MODEL and CLIP only (no VAE). Scope covers HSWQ and native **comfy_quant** packs (including **HSWQ ConvRot INT8** and **HSWQ ConvRot NVFP4**), not HSWQ-only weights.
+ComfyUI node that loads **MODEL** and **CLIP** from standard SDXL checkpoints, with optional device selection and **FP8 / INT8 / ConvRot NVFP4** precision support. Use it like the standard Load Checkpoint node; it outputs MODEL and CLIP only (no VAE).
+
+**SDXL ConvRot INT8** and **SDXL ConvRot NVFP4** are **supported only for models quantized with [Hybrid-Sensitivity-Weighted-Quantization](https://github.com/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization)**. Other third-party ConvRot INT8 / ConvRot NVFP4 packs are out of scope.
 
 **ConvRot NVFP4:** Select `weight_dtype` = **`ConvRot NVFP4`**, or leave **`default`** when the checkpoint has comfy_quant `nvfp4` markers — the loader routes to this extension’s NVFP4 stack (Linear → NVFP4 Tensor Core / `scaled_mm_nvfp4` + optional act ConvRot; Conv2d → INT8 + ConvRot via the INT8 patches). NVFP4 dispatch is installed **after** INT8 dispatch so mixed packs (NVFP4 Linear + INT8 Conv) are not stolen by INT8-only auto-detect.
 
@@ -62,8 +64,8 @@ This loader does **not** ship an in-node Triton accelerate toggle. INT8 Linear s
 - **Checkpoint Loading**: Loads both UNet (MODEL) and CLIP from a single SDXL checkpoint file (same as standard Load Checkpoint)
 - **Device Selection**: Optional device parameter to choose GPU (e.g. `cuda:0`, `cuda:1`) or CPU for model loading
 - **FP8 weight dtype**: `fp8_e4m3fn`, `fp8_e4m3fn_fast`, `fp8_e5m2` (plus `default` for non-forced dtype)
-- **INT8 weight dtype**: `int8_tensorwise` — native **comfy_quant** / `int8_tensorwise` via ComfyUI `MixedPrecisionOps` (this extension also patches **Conv2d** quant load so SD UNet INT8 works, not Linear-only)
-- **ConvRot NVFP4 weight dtype**: `ConvRot NVFP4` — HSWQ **comfy_quant `nvfp4`** packs (Linear NVFP4 + Conv2d INT8 / ConvRot); applies `nodes/nvfp4` patches (packed-K detect, full NVFP4 Linear load, Tensor Core forward)
+- **INT8 weight dtype**: `int8_tensorwise` — **HSWQ SDXL ConvRot INT8** via ComfyUI `MixedPrecisionOps` (this extension also patches **Conv2d** quant load so SD UNet INT8 works, not Linear-only). **Supported only for models quantized with [Hybrid-Sensitivity-Weighted-Quantization](https://github.com/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization).**
+- **ConvRot NVFP4 weight dtype**: `ConvRot NVFP4` — **HSWQ SDXL ConvRot NVFP4** (`comfy_quant` `nvfp4`: Linear NVFP4 + Conv2d INT8 / ConvRot); applies `nodes/nvfp4` patches (packed-K detect, full NVFP4 Linear load, Tensor Core forward). **Supported only for models quantized with [Hybrid-Sensitivity-Weighted-Quantization](https://github.com/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization).**
 - **INT8 auto-detect**: If the safetensors looks like comfy_quant INT8 (and is not NVFP4), the loader uses the MixedPrecisionOps / INT8 path even when `weight_dtype` is not set to `int8_tensorwise`
 - **NVFP4 auto-detect**: If `weight_dtype` is `default` and the checkpoint looks like comfy_quant NVFP4, the loader uses the ConvRot NVFP4 path automatically
 - **Standard ComfyUI Integration**: Uses `load_checkpoint_guess_config`; compatible with standard ComfyUI workflows
@@ -74,6 +76,7 @@ This loader does **not** ship an in-node Triton accelerate toggle. INT8 Linear s
 - **Inputs**: `ckpt_name` (checkpoint file), `weight_dtype` (`default` / FP8 options / `int8_tensorwise` / `ConvRot NVFP4`), and optionally `device`
 - **Outputs**: MODEL and CLIP only; use a separate VAE loader if needed
 - **Category**: Loaders (`loaders`)
+- **SDXL ConvRot INT8 / ConvRot NVFP4 compatibility**: **Only** checkpoints quantized with [Hybrid-Sensitivity-Weighted-Quantization](https://github.com/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization)
 - **ConvRot NVFP4 models**: Published packs — [Hybrid-Sensitivity-Weighted-Quantization-SDXL-ConvRot-NVFP4](https://huggingface.co/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization-SDXL-ConvRot-NVFP4)
 - **INT8 speed**: Rely on ComfyUI / `comfy_kitchen` for Linear acceleration; this node does not install or toggle Triton
 - **INT8 + LoRA**: For INT8 LoRA bake / Status logging details, see `md/HSWQ_INT8_AND_LORA_TECHNICAL_GUIDE.md`
@@ -208,13 +211,6 @@ See [changelog.md](changelog.md).
 * Quantized models (e.g., SVDQ / FP4 / INT4) are considered **derivative works** of the original checkpoints.
 * Before sharing or redistributing quantized models, verify that the **original model license explicitly allows redistribution and derivative works**.
 * Many SDXL-based models **do not permit redistribution**, even in quantized form.
-
-### Experimental / Unofficial Status
-
-* This project is an **UNOFFICIAL and experimental implementation**.
-* It is **not affiliated with, endorsed by, or supported by the Nunchaku or ComfyUI core teams**.
-* Behavior, performance, and compatibility may change without notice.
-* Use at your own risk.
 
 ## License (Apache License 2.0)
 
