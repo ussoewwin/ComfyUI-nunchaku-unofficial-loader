@@ -571,7 +571,14 @@ try:
                 default_dev = devices[1] if len(devices) > 1 else devices[0]
                 req = {
                     "ckpt_name": (folder_paths.get_filename_list("checkpoints"), {"tooltip": "SDXL checkpoint to load MODEL and CLIP from (same as standard Load Checkpoint)."}),
-                    "weight_dtype": (["default", "fp8_e4m3fn", "fp8_e4m3fn_fast", "fp8_e5m2", "int8_tensorwise"],),
+                    "weight_dtype": ([
+                        "default",
+                        "fp8_e4m3fn",
+                        "fp8_e4m3fn_fast",
+                        "fp8_e5m2",
+                        "int8_tensorwise",
+                        "ConvRot NVFP4",
+                    ],),
                 }
                 opt = {"device": (devices, {"default": default_dev})}
                 return {"required": req, "optional": opt}
@@ -708,6 +715,13 @@ try:
     install_int8_option_dispatch(NODE_CLASS_MAPPINGS)
 except Exception as e:
     logger.exception("[HSWQ INT8] install_int8_option_dispatch: %s", e)
+
+# After INT8 dispatch: NVFP4 ckpts also have int8 Conv markers; NVFP4 must win first.
+try:
+    from .nodes.nvfp4.comfy_quant_nvfp4 import install_nvfp4_option_dispatch
+    install_nvfp4_option_dispatch(NODE_CLASS_MAPPINGS)
+except Exception as e:
+    logger.exception("[HSWQ NVFP4] install_nvfp4_option_dispatch: %s", e)
 
 # HSWQ Batched Detailer (SEGS) - phase-split version to minimize model switching
 try:
