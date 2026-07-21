@@ -1,5 +1,11 @@
 # Changelog
 
+## Version 3.2.9
+
+- **Changed**: `pyproject.toml` `[project].name` updated to match the new repository identity so the ComfyUI registry category is **comfyui-hswq-loader-and-tools**.
+- **Changed**: Re-registered the node pack with ComfyUI under the corrected project name.
+- See [Release Notes v3.2.9](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.2.9) for details.
+
 ## Version 3.2.8
 
 - **Changed**: Repository renamed to **ComfyUI-HSWQ-Loader-and-Tools**.
