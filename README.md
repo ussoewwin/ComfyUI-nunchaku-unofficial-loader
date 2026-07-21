@@ -86,8 +86,6 @@ This loader does **not** ship an in-node Triton accelerate toggle. INT8 Linear s
 
 <img src="png/usdu_auto_workflow.png" alt="HSWQ Ultimate SD Upscale" width="400">
 
-ComfyUI node for upscaling images using tile-based image-to-image processing, specifically optimized for Nunchaku SDXL models.
-
 #### Features
 
 - **Tile-based Upscaling**: Processes images in tiles to handle high-resolution upscaling efficiently
