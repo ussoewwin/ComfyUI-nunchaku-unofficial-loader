@@ -80,6 +80,7 @@ This loader does **not** ship an in-node Triton accelerate toggle. INT8 Linear s
 - **ConvRot NVFP4 models**: Published packs — [Hybrid-Sensitivity-Weighted-Quantization-SDXL-ConvRot-NVFP4](https://huggingface.co/ussoewwin/Hybrid-Sensitivity-Weighted-Quantization-SDXL-ConvRot-NVFP4)
 - **INT8 speed**: Rely on ComfyUI / `comfy_kitchen` for Linear acceleration; this node does not install or toggle Triton
 - **INT8 + LoRA**: For INT8 LoRA bake / Status logging details, see `md/HSWQ_INT8_AND_LORA_TECHNICAL_GUIDE.md`
+- **VRAM purge (required for HSWQ ConvRot INT8 / ConvRot NVFP4)**: When you load with **HSWQ ConvRot INT8** or **HSWQ ConvRot NVFP4**, always place **General Purge VRAM V2** from [ComfyUI-DistorchMemoryManager](https://github.com/ussoewwin/ComfyUI-DistorchMemoryManager) at the **end** of the workflow and turn its **`HSWQ`** toggle **on**. HSWQ residual GPU/host memory (and NVFP4 runtime pools / CUDA graphs) is not fully released by ComfyUI's generic unload, so a second generation after the first can fail (e.g. `quantize_nvfp4` / `PyCapsule` / `pooled TC path failed`) without this purge.
 
 ### HSWQ Ultimate SD Upscale
 
