@@ -201,7 +201,7 @@ ComfyUI 输出节点，将图像以 **PNG** 或 **JPG** 保存到 ComfyUI 的 **
 
 ## 更新日志
 
-见 [changelog.md](../changelog.md)。
+见 [zhmd/CHANGELOG.md](CHANGELOG.md)。
 
 ## 安全与许可声明
 
