@@ -7,6 +7,11 @@
   </tr>
 </table>
 
+## Version 3.3.0
+
+- **更改**：其余 ComfyUI 节点 class ID 由 Nunchaku 前缀统一为 HSWQ 前缀（`HSWQSaveImage`、`HSWQCheckpointLoaderSDXL`、`HSWQSDXLLoraStackV3`、`HSWQZImageDiTLoader`，以及相关 JS hooks）。
+- 详情见 [Release Notes v3.3.0](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.3.0)。
+
 ## Version 3.2.9
 
 - **更改**：更新 `pyproject.toml` 的 `[project].name`，使其与新仓库身份一致，ComfyUI 注册表分类显示为 **comfyui-hswq-loader-and-tools**。

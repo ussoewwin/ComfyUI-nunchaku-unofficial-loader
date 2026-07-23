@@ -7,6 +7,11 @@
   </tr>
 </table>
 
+## Version 3.3.0
+
+- **Changed**: Remaining ComfyUI node class IDs renamed from Nunchaku-prefixed names to HSWQ-prefixed IDs (`HSWQSaveImage`, `HSWQCheckpointLoaderSDXL`, `HSWQSDXLLoraStackV3`, `HSWQZImageDiTLoader`, and related JS hooks).
+- See [Release Notes v3.3.0](https://github.com/ussoewwin/ComfyUI-HSWQ-Loader-and-Tools/releases/tag/v3.3.0) for details.
+
 ## Version 3.2.9
 
 - **Changed**: `pyproject.toml` `[project].name` updated to match the new repository identity so the ComfyUI registry category is **comfyui-hswq-loader-and-tools**.
