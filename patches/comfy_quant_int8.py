@@ -2381,7 +2381,7 @@ def install_int8_option_dispatch(node_class_mappings) -> bool:
 
         unet_cls.load_unet = load_unet
 
-    sdxl_cls = node_class_mappings.get("NunchakuUssoewwinCheckpointLoaderSDXL")
+    sdxl_cls = node_class_mappings.get("HSWQCheckpointLoaderSDXL")
     if sdxl_cls is not None:
         _orig_load_checkpoint = sdxl_cls.load_checkpoint
 

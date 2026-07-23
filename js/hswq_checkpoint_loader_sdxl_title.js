@@ -1,6 +1,6 @@
 import { app } from "../../scripts/app.js";
 
-const NODE_ID = "NunchakuUssoewwinCheckpointLoaderSDXL";
+const NODE_ID = "HSWQCheckpointLoaderSDXL";
 const DISPLAY_TITLE = "HSWQ Checkpoint Loader (SDXL)";
 
 function applyTitle(node) {
@@ -12,7 +12,7 @@ function applyTitle(node) {
 }
 
 app.registerExtension({
-    name: "nunchaku_ussoewwin.hswq_checkpoint_loader_sdxl_title",
+    name: "hswq.checkpoint_loader_sdxl_title",
 
     async beforeRegisterNodeDef(nodeType, nodeData, _app) {
         if (nodeData?.name !== NODE_ID) return;

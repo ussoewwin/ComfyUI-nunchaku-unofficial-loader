@@ -6,7 +6,7 @@ from __future__ import annotations
 import logging
 import torch
 
-logger = logging.getLogger("nunchaku.usdu_compat_patches")
+logger = logging.getLogger("hswq.usdu_compat_patches")
 
 
 def patch_comfy_kitchen_copy_guard():
@@ -32,7 +32,7 @@ def patch_comfy_kitchen_copy_guard():
 
     base._handle_copy_ = _handle_copy_safe
     base._DISPATCH_TABLE[torch.ops.aten.copy_.default] = _handle_copy_safe
-    logger.info("[Nunchaku USDU] Applied comfy_kitchen copy_ guard (size mismatch -> return dst).")
+    logger.info("[HSWQ USDU] Applied comfy_kitchen copy_ guard (size mismatch -> return dst).")
 
 
 def patch_comfy_kitchen_fp8_linear_bias_guard():
@@ -95,7 +95,7 @@ def patch_comfy_kitchen_fp8_linear_bias_guard():
 
         base._LAYOUT_DISPATCH_TABLE[op_addmm][layout_cls] = _fp8_addmm_bias_safe
 
-    logger.info("[Nunchaku USDU] Applied comfy_kitchen FP8 linear/addmm bias guard.")
+    logger.info("[HSWQ USDU] Applied comfy_kitchen FP8 linear/addmm bias guard.")
 
 
 def patch_control_embedder_linear_weight_transpose():
@@ -123,7 +123,7 @@ def patch_control_embedder_linear_weight_transpose():
         return x
 
     linear_cls.forward_comfy_cast_weights = _forward_comfy_cast_weights_safe
-    logger.info("[Nunchaku USDU] Applied control embedder linear weight-transpose guard.")
+    logger.info("[HSWQ USDU] Applied control embedder linear weight-transpose guard.")
 
 
 def patch_lumina_modulate_scale_guard():
@@ -167,7 +167,7 @@ def patch_lumina_modulate_scale_guard():
 
         lumina_model.apply_gate = _apply_gate_safe
 
-    logger.info("[Nunchaku USDU] Applied Lumina modulate & apply_gate scale-dimension guard.")
+    logger.info("[HSWQ USDU] Applied Lumina modulate & apply_gate scale-dimension guard.")
 
 
 def apply_usdu_compat_patches():

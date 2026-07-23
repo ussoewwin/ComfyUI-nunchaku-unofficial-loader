@@ -5,16 +5,16 @@ console.log("★★★ sdxl_lora_dynamic_v3.js: SDXL LoRA Stack V3 ★★★");
 const HIDDEN_TAG = "tschide";
 
 app.registerExtension({
-    name: "nunchaku_ussoewwin.sdxl_lora_dynamic_v3",
+    name: "hswq.sdxl_lora_dynamic_v3",
 
     async beforeRegisterNodeDef(nodeType, nodeData, app) {
-        if (nodeData.name === "NunchakuUssoewwinSDXLLoraStackV3") {
+        if (nodeData.name === "HSWQSDXLLoraStackV3") {
             nodeType["@visibleLoraCount"] = { type: "number", default: 1, min: 1, max: 10, step: 1 };
         }
     },
 
     nodeCreated(node) {
-        if (node.comfyClass !== "NunchakuUssoewwinSDXLLoraStackV3") return;
+        if (node.comfyClass !== "HSWQSDXLLoraStackV3") return;
 
         if (!node.properties) node.properties = {};
         if (node.properties["visibleLoraCount"] === undefined) node.properties["visibleLoraCount"] = 1;

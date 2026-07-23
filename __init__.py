@@ -499,17 +499,17 @@ try:
         HSWQUltimateSDUpscale,
     )
     NODE_CLASS_MAPPINGS["HSWQUltimateSDUpscale"] = HSWQUltimateSDUpscale
-    logger.info("Nunchaku Ultimate SD Upscale nodes registered successfully")
+    logger.info("HSWQ Ultimate SD Upscale nodes registered successfully")
 except Exception as e:
-    logger.error(f"Failed to register Nunchaku Ultimate SD Upscale nodes: {e}", exc_info=True)
+    logger.error(f"Failed to register HSWQ Ultimate SD Upscale nodes: {e}", exc_info=True)
 
 try:
-    from .nodes.hswq_save_image import NunchakuSaveImage
+    from .nodes.hswq_save_image import HSWQSaveImage
 
-    NODE_CLASS_MAPPINGS["NunchakuSaveImage"] = NunchakuSaveImage
-    logger.info("Nunchaku Save Image node registered successfully")
+    NODE_CLASS_MAPPINGS["HSWQSaveImage"] = HSWQSaveImage
+    logger.info("HSWQ Save Image node registered successfully")
 except Exception as e:
-    logger.error(f"Failed to register Nunchaku Save Image node: {e}", exc_info=True)
+    logger.error(f"Failed to register HSWQ Save Image node: {e}", exc_info=True)
 
 # SDXL MultiGPU node registration (UNET + CLIP, ref CheckpointLoaderSimple)
 try:
@@ -523,7 +523,7 @@ try:
         sdxl_logger.warning("[SDXL] UNETLoader not found in GLOBAL_NODE_CLASS_MAPPINGS")
     else:
 
-        class NunchakuUssoewwinCheckpointLoaderSDXL(_UNETLoaderBase):
+        class HSWQCheckpointLoaderSDXL(_UNETLoaderBase):
             """HSWQ Checkpoint Loader (SDXL) with device selection. Ref: CheckpointLoaderSimple."""
 
             @classmethod
@@ -580,12 +580,12 @@ try:
                 finally:
                     set_current_device(original_device)
 
-        NODE_CLASS_MAPPINGS["NunchakuUssoewwinCheckpointLoaderSDXL"] = NunchakuUssoewwinCheckpointLoaderSDXL
-        sdxl_logger.info("[SDXL] Registered NunchakuUssoewwinCheckpointLoaderSDXL node (MODEL + CLIP)")
+        NODE_CLASS_MAPPINGS["HSWQCheckpointLoaderSDXL"] = HSWQCheckpointLoaderSDXL
+        sdxl_logger.info("[SDXL] Registered HSWQCheckpointLoaderSDXL node (MODEL + CLIP)")
 
         # Z Image Turbo checkpoint loader removed (Nunchaku Z Image Turbo support dropped).
 except Exception as e:
-    sdxl_logger.exception(f"[SDXL] Failed to register NunchakuUssoewwinCheckpointLoaderSDXL: {e}")
+    sdxl_logger.exception(f"[SDXL] Failed to register HSWQCheckpointLoaderSDXL: {e}")
 
 # Z Image FP8 E4M3 UNet Loader (DiT Loader excluded from init)
 try:
@@ -612,9 +612,9 @@ except Exception as e:
 try:
     from .nodes.lora.sdxl_v3 import GENERATED_NODES as _SDXL_LORA_V3_NODES
     NODE_CLASS_MAPPINGS.update(_SDXL_LORA_V3_NODES)
-    logger.info("Registered NunchakuUssoewwinSDXLLoraStackV3")
+    logger.info("Registered HSWQSDXLLoraStackV3")
 except Exception as e:
-    logger.exception("[SDXL LoRA] NunchakuUssoewwinSDXLLoraStackV3: %s", e)
+    logger.exception("[SDXL LoRA] HSWQSDXLLoraStackV3: %s", e)
 
 # HSWQ Batched Detailer (SEGS) - phase-split version to minimize model switching
 try:
@@ -633,7 +633,7 @@ except (ImportError, ModuleNotFoundError) as e:
 
 NODE_DISPLAY_NAME_MAPPINGS = {k: getattr(v, "TITLE", k) for k, v in NODE_CLASS_MAPPINGS.items()}
 # Explicit override — TITLE alone is not enough for ComfyUI graph node headers.
-NODE_DISPLAY_NAME_MAPPINGS["NunchakuUssoewwinCheckpointLoaderSDXL"] = "HSWQ Checkpoint Loader (SDXL)"
+NODE_DISPLAY_NAME_MAPPINGS["HSWQCheckpointLoaderSDXL"] = "HSWQ Checkpoint Loader (SDXL)"
 WEB_DIRECTORY = "js"
 __all__ = ["NODE_CLASS_MAPPINGS", "NODE_DISPLAY_NAME_MAPPINGS", "WEB_DIRECTORY"]
 logger.info("=" * (80 + len(" ComfyUI-nunchaku Initialization ")))

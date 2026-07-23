@@ -7,7 +7,7 @@ import torch
 from PIL import Image, PngImagePlugin
 
 
-class NunchakuSaveImage:
+class HSWQSaveImage:
     def __init__(self):
         self.output_dir = folder_paths.get_output_directory()
         self.type = "output"

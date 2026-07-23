@@ -1,5 +1,5 @@
 """
-This module provides the :class:`NunchakuZImageDiTLoader` class for loading Nunchaku Z-Image-Turbo models.
+This module provides the :class:`HSWQZImageDiTLoader` class for loading HSWQ Z-Image-Turbo models.
 """
 
 import json
@@ -169,9 +169,9 @@ def load_diffusion_model_state_dict(
     )
 
 
-class NunchakuZImageDiTLoader:
+class HSWQZImageDiTLoader:
     """
-    Loader for Nunchaku Z-Image-Turbo models.
+    Loader for HSWQ Z-Image-Turbo models.
 
     Attributes
     ----------
@@ -180,9 +180,9 @@ class NunchakuZImageDiTLoader:
     FUNCTION : str
         Name of the function to call ("load_model").
     CATEGORY : str
-        Node category ("Nunchaku").
+        Node category ("HSWQ").
     TITLE : str
-        Node title ("Nunchaku Z-Image-Turbo DiT Loader").
+        Node title ("HSWQ Z-Image-Turbo DiT Loader").
     """
 
     @classmethod
@@ -199,7 +199,7 @@ class NunchakuZImageDiTLoader:
             "required": {
                 "model_name": (
                     get_filename_list("diffusion_models"),
-                    {"tooltip": "The Nunchaku Z-Image-Turbo model."},
+                    {"tooltip": "The HSWQ Z-Image-Turbo model."},
                 ),
                 "cpu_offload": (
                     ["auto", "enable", "disable"],
@@ -238,8 +238,8 @@ class NunchakuZImageDiTLoader:
 
     RETURN_TYPES = ("MODEL",)
     FUNCTION = "load_model"
-    CATEGORY = "Nunchaku-ussoewwin"
-    TITLE = "Nunchaku-ussoewwin Z-Image-Turbo DiT Loader"
+    CATEGORY = "HSWQ"
+    TITLE = "HSWQ Z-Image-Turbo DiT Loader"
 
     def load_model(
         self,

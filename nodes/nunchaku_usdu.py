@@ -1,4 +1,4 @@
-"""Nunchaku-dedicated Ultimate SD Upscale node. Uses usdu_bundle."""
+"""HSWQ Ultimate SD Upscale node. Uses usdu_bundle."""
 
 import logging
 import torch

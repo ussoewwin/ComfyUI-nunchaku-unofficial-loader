@@ -1,5 +1,5 @@
 """
-This module provides the :class:`NunchakuUssoewwinSDXLLoraStackV3` node
+This module provides the :class:`HSWQSDXLLoraStackV3` node
 for applying multiple LoRAs to SDXL models within ComfyUI.
 """
 
@@ -2194,7 +2194,7 @@ def _apply_lora_sdxl_nunchaku_safe(model, clip, lora_sd, strength_model: float, 
     return comfy.sd.load_lora_for_models(model, clip, lora_sd_to_apply, strength_model, strength_clip)
 
 
-class NunchakuUssoewwinSDXLLoraStackV3:
+class HSWQSDXLLoraStackV3:
     """
     Node for loading and applying multiple LoRAs to an SDXL model + SDXL CLIP with dynamic UI.
 
@@ -2297,8 +2297,8 @@ class NunchakuUssoewwinSDXLLoraStackV3:
     RETURN_TYPES = ("MODEL", "CLIP")
     OUTPUT_TOOLTIPS = ("The modified diffusion model with all LoRAs applied.", "The modified CLIP with LoRAs applied (if applicable).")
     FUNCTION = "load_lora_stack"
-    TITLE = "Nunchaku-ussoewwin SDXL LoRA Stack V3"
-    CATEGORY = "Nunchaku-ussoewwin"
+    TITLE = "HSWQ SDXL LoRA Stack V3"
+    CATEGORY = "HSWQ"
     DESCRIPTION = "Apply multiple LoRAs to an SDXL model + CLIP in a single node with dynamic UI control."
 
     def load_lora_stack(self, model, clip, lora_count, toggle_all=True, debug=False, **kwargs):
@@ -2377,9 +2377,9 @@ class NunchakuUssoewwinSDXLLoraStackV3:
         return (out_model, out_clip)
 
 GENERATED_NODES = {
-    "NunchakuUssoewwinSDXLLoraStackV3": NunchakuUssoewwinSDXLLoraStackV3
+    "HSWQSDXLLoraStackV3": HSWQSDXLLoraStackV3
 }
 
 GENERATED_DISPLAY_NAMES = {
-    "NunchakuUssoewwinSDXLLoraStackV3": "Nunchaku-ussoewwin SDXL LoRA Stack V3"
+    "HSWQSDXLLoraStackV3": "HSWQ SDXL LoRA Stack V3"
 }
